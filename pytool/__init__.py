@@ -1,4 +1,4 @@
-from .pyava import Remote, Class, Enum, Manager, Module, ok, unwrap, is_object_class
+from .pyava import Remote, Class, Enum, ok, unwrap, is_class_object, is_class, Long, Integer
 from .agent import JavaAgent
 from .tools import *
 

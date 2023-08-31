@@ -1,8 +1,9 @@
 from typing import Any, Dict
 import json
 import copy
+import importlib
 
-from .agent import JavaAgent
+from .agent import JavaAgent, AGENT_MODULE_NAME
 
 
 class Remote():
@@ -61,37 +62,26 @@ class Remote():
             other._args_chain_, default=lambda x: x._collect_() if isinstance(x, Remote) else x)
         return data
 
-    def _invoke_(self) -> str or Dict:
-        agent: JavaAgent = globals().get('agent', JavaAgent())
-        return agent.debug(**self._collect_())
+    def _invoke_(self) -> Dict:
+        try:
+            agent: JavaAgent = importlib.import_module(AGENT_MODULE_NAME).agent
+            return agent.debug(**self._collect_())
+        except ModuleNotFoundError:
+            return {'warn': 'NoAgent'}
 
     def _field_(self, field: str) -> ('Remote', 'Remote'):
         clz = self.getClass()
-        selfIsClass = unwrap(
-            Class('java.lang.Class').isAssignableFrom(clz)) is True
+        selfIsClass = is_class(clz)
         if selfIsClass:
             return None, self.getDeclaredField(field)
 
         while True:
-            if is_object_class(clz):
+            if is_class_object(clz):
                 raise AttributeError(f'{field}属性不存在')
             field = clz.getDeclaredField(field)
             if ok(field):
                 return self, field
             clz = clz.getSuperclass()
-
-    def _module_(self, module: str, uid: int) -> 'Remote':
-        if self._data_:
-            raise ValueError("已实例的对象不可以重复使用")
-        self._data_['module'] = module
-        self._data_['uid'] = uid
-        return self
-
-    def _manager_(self, manager: str) -> 'Remote':
-        if self._data_:
-            raise ValueError("已实例的对象不可以重复使用")
-        self._data_['manager'] = manager
-        return self
 
     def _clazz_(self, clazz: str) -> 'Remote':
         if self._data_:
@@ -114,37 +104,37 @@ class Remote():
         return self
 
 
-def Module(module: str, uid: int) -> Remote:
-    return Remote()._module_(upper(module), uid)
-
-
-def Manager(manager: str) -> Remote:
-    return Remote()._manager_(upper(manager))
-
-
-def Class(clazz: str) -> Remote:
+def Class(clazz: str, /) -> Remote:
     return Remote()._clazz_(clazz)
 
 
-def Enum(enum, target: str or int = 0) -> Remote:
+def Enum(enum, /, target: str | int = 0) -> Remote:
     return Remote()._enum_(enum, target)
 
 
-def unwrap(target: Remote) -> Any:
+def Long(number: int | str, /) -> Remote:
+    return Class('java.lang.Long').valueof(number)
+
+
+def Integer(number: int | str, /) -> Remote:
+    return Class('java.lang.Integer').valueof(number)
+
+
+def unwrap(target: Remote, /) -> Any:
     ret = target._invoke_()
     if ret.get('code') == 200:
         return ret.get('data')
     raise SystemError(ret)
 
 
-def ok(target: Remote) -> Any:
+def ok(target: Remote, /) -> Any:
     ret = target._invoke_()
     return ret.get('code') == 200
 
 
-def is_object_class(clz: 'Remote') -> bool:
+def is_class_object(clz: Remote, /) -> bool:
     return unwrap(Class('java.lang.Object').equals(clz)) is True
 
 
-def upper(val: str) -> str:
-    return val[:1].upper() + val[1:] if val else val
+def is_class(clz: Remote, /) -> bool:
+    return unwrap(Class('java.lang.Class').isAssignableFrom(clz)) is True
