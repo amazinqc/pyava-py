@@ -9,5 +9,5 @@ urlpatterns = [
     path("code/tools", views.tools, name="tools"),
     path("code/tips", views.tips, name="tips"),
     path('code/<int:id>/', views.code, name='code'),
-    path('code/exec', views.exec, name='exec'),
+    path('code/debug', views.debug, name='debug'),
 ]

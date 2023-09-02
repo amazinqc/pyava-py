@@ -1,9 +1,8 @@
 from typing import Any, Dict
 import json
 import copy
-import importlib
 
-from .agent import JavaAgent, AGENT_MODULE_NAME
+from .agent import JavaAgent
 
 
 class Remote():
@@ -63,10 +62,10 @@ class Remote():
         return data
 
     def _invoke_(self) -> Dict:
-        try:
-            agent: JavaAgent = importlib.import_module(AGENT_MODULE_NAME).agent
+        agent = JavaAgent.SHARED
+        if agent is not None:
             return agent.debug(**self._collect_())
-        except ModuleNotFoundError:
+        else:
             return {'warn': 'NoAgent'}
 
     def _field_(self, field: str) -> ('Remote', 'Remote'):

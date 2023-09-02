@@ -1,4 +1,3 @@
-from typing import Iterable
 from django.http import JsonResponse
 
 from abc import abstractmethod
@@ -24,6 +23,6 @@ def jsonify(data: any):
         return data.json()
     if isinstance(data, dict):
         return data
-    if isinstance(data, Iterable):
+    if isinstance(data, (list, tuple, set)):
         return [jsonify(d) for d in data]
     return data

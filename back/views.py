@@ -32,7 +32,27 @@ def code(request, id):
         return Error("指令代码不存在")
     return Json(tool)
 
+
 @require_POST
-def exec(request):
+def debug(request):
     import json
-    return Json(json.loads(request.body))
+    draft: dict = json.loads(request.body)
+    raw_code = f'from pytool import *\n{draft["code"]}'
+    from pytool import JavaAgent
+    import time
+
+    class DebugAgent(JavaAgent):
+
+        def __init__(self) -> None:
+            pass
+
+        def debug(self, **kvargs) -> dict:
+            return {'code': 200, 'data': time.time()}
+
+    with DebugAgent():
+        l = {'returned': None}
+        try:
+            exec(raw_code, {}, l)
+            return Json(l.get('returned', None))
+        except BaseException as e:
+            return Error(str(e))
