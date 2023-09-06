@@ -19,7 +19,7 @@ from django.urls import path, include
 from django.contrib.staticfiles.views import serve
 
 urlpatterns = [
-    path("api/", include("back.urls")),
-    path('admin/', admin.site.urls),
+    path("api/", include("back.urls"), name='api'),
+    path('admin/', admin.site.urls, name='admin'),
     path('favicon.ico', serve, {'path': 'favicon.ico'}),
 ]

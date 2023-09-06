@@ -37,6 +37,8 @@ def code(request, id):
 def debug(request):
     import json
     draft: dict = json.loads(request.body)
+    if 'code' not in draft:
+        return Error("未识别的格式")
     raw_code = f'from pytool import *\n{draft["code"]}'
     from pytool import JavaAgent
     import time
@@ -50,9 +52,12 @@ def debug(request):
             return {'code': 200, 'data': time.time()}
 
     with DebugAgent():
-        l = {'returned': None}
         try:
-            exec(raw_code, {}, l)
-            return Json(l.get('returned', None))
+            exec(raw_code, {}, l := {})
+            if not callable(code := l.get('code')):
+                return Error("未识别的代码")
+            return Json(code())
         except BaseException as e:
+            import logging
+            logging.getLogger('back').error(draft, exc_info=e)
             return Error(str(e))

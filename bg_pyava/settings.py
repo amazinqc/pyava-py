@@ -128,66 +128,87 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 
 LOGGING = {
-    "version": 1,
-    "disable_existing_loggers": False,
-    "filters": {"require_debug_false": {"()": "django.utils.log.RequireDebugFalse"}},
-    "formatters": {  # 定义了两种日志格式
-        "verbose": {  # 详细
-            "format": "%(asctime)s %(levelname)s %(module)s "
-            "%(process)d %(thread)d %(message)s"
+    # 日志记录配置版本信息
+    'version': 1,
+    # 启用已有日志配置信息
+    'disable_existing_loggers': False,
+    # 配置日志格式化对象：定义消息格式
+    'formatters': {
+        # 定义标准消息格式
+        'standard': {
+            'format': '{levelname} {asctime} {module} {process:d} {thread:d} {message}',
+            'style': '{',
         },
-        'simple': {  # 简单
-            'format': '[%(asctime)s][%(levelname)s][%(filename)s:%(lineno)d]%(message)s'
+        # 定义简化消息格式，用于控制台操作
+        'simple': {
+            'format': '{levelname} [{asctime}] {message}',
+            'style': '{',
         },
     },
-    "handlers": {  # 定义了三种日志处理方式
-        "mail_admins": {  # 只有debug=False且Error级别以上发邮件给admin
-            "level": "ERROR",
-            "filters": ["require_debug_false"],
-            "class": "django.utils.log.AdminEmailHandler",
+    # 配置过滤器
+    'filters': {
+        'require_debug_true': {
+            '()': 'django.utils.log.RequireDebugTrue',
         },
-        'exception': {
-            'level': 'ERROR',
-            "filters": ["require_debug_false"],
+        'require_debug_false': {
+            '()': 'django.utils.log.RequireDebugFalse',
+        },
+    },
+    # 配置定义处理程序
+    'handlers': {
+        # 配置控制台日志处理程序
+        'console': {
+            # 记录INFO级别及以上日志
+            'level': 'INFO',
+            'filters': ['require_debug_true'],
+            'class': 'logging.StreamHandler',
+            # 使用建议日志格式消息
+            'formatter': 'simple'
+        },
+        # 配置文件日志处理程序
+        'file': {
+            # 记录DEBUG级别及以上日志
+            'level': 'INFO',
+            'filters': ['require_debug_false'],
+            # 使用标准消息格式进行记录
+            'formatter': 'standard',
             'class': 'logging.handlers.RotatingFileHandler',
-            'filename': "log/error.log",
+            'filename': 'log/info.log',
+            # 备份文件数量
+            'backupCount': 10,
+            # 设置每个文件存储的最大体积
             'maxBytes': 1024 * 1024 * 10,
-            'backupCount': 5,   # 最多保留5个文件
-            'formatter': 'simple',
-            'encoding': 'utf-8',
         },
-        'access': {  # Info级别以上保存到日志文件
-            'level': 'DEBUG',
-            # "filters": ["require_debug_false"],
-            'class': 'logging.handlers.RotatingFileHandler',  # 保存到文件，根据文件大小自动切
-            'filename': "log/access.log",  # 日志文件
-            'maxBytes': 1024 * 1024 * 10,  # 日志大小 10M
-            'backupCount': 5,
-            'formatter': 'simple',  # 简单格式
-            'encoding': 'utf-8',
-        },
-        "console": {  # 打印到终端console
-            "level": "DEBUG",
-            "class": "logging.StreamHandler",
-            "formatter": "verbose",
-        },
+        # 配置邮件处理程序
+        'error': {
+            # 记录ERROR级别及以上日志
+            'level': 'ERROR',
+            'filters': ['require_debug_false'],
+            # 使用标准消息格式进行记录
+            'formatter': 'standard',
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': 'log/error.log',
+            # 备份文件数量
+            'backupCount': 10,
+            # 设置每个文件存储的最大体积
+            'maxBytes': 1024 * 1024 * 10,
+        }
     },
-    "root": {"level": "INFO", "handlers": ["console"]},
-    "loggers": {
-        "": {
-            "handlers": ["access"],
-            "level": "DEBUG",
-            "propagate": True,
+    # 配置日志记录器对象
+    'loggers': {
+        'django': {
+            'handlers': ['console', 'file'],
+            'propagate': True,
+            'level': 'DEBUG'
         },
-        "django.request": {  # Django的request发生error会自动记录
-            "handlers": ["exception"],
-            "level": "ERROR",
-            "propagate": True,  # 向不向更高级别的logger传递
+        'django.request': {
+            'handlers': ['error', 'console'],
+            'level': 'ERROR',
+            'propagate': False,
         },
-        "django.security.DisallowedHost": {  # 对于不在 ALLOWED_HOSTS 中的请求不发送报错邮件
-            "level": "ERROR",
-            "handlers": ["exception"],
-            "propagate": True,
-        },
-    },
+        'back': {
+            'handlers': ['error', 'console'],
+            'level': 'ERROR',
+        }
+    }
 }
