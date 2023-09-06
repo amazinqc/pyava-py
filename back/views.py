@@ -49,14 +49,14 @@ def debug(request):
             pass
 
         def debug(self, **kvargs) -> dict:
-            return {'code': 200, 'data': time.time()}
+            return {'code': 200, 'data': kvargs}
 
     with DebugAgent():
         try:
-            exec(raw_code, {}, l := {})
-            if not callable(code := l.get('code')):
+            exec(raw_code, envs := {})
+            if not callable(code := envs.get('code', None)):
                 return Error("未识别的代码")
-            return Json(code())
+            return Json(code()) # todo parameters
         except BaseException as e:
             import logging
             logging.getLogger('back').error(draft, exc_info=e)
