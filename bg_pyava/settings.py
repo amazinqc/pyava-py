@@ -125,3 +125,69 @@ STATIC_URL = 'static/'
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "filters": {"require_debug_false": {"()": "django.utils.log.RequireDebugFalse"}},
+    "formatters": {  # 定义了两种日志格式
+        "verbose": {  # 详细
+            "format": "%(asctime)s %(levelname)s %(module)s "
+            "%(process)d %(thread)d %(message)s"
+        },
+        'simple': {  # 简单
+            'format': '[%(asctime)s][%(levelname)s][%(filename)s:%(lineno)d]%(message)s'
+        },
+    },
+    "handlers": {  # 定义了三种日志处理方式
+        "mail_admins": {  # 只有debug=False且Error级别以上发邮件给admin
+            "level": "ERROR",
+            "filters": ["require_debug_false"],
+            "class": "django.utils.log.AdminEmailHandler",
+        },
+        'exception': {
+            'level': 'ERROR',
+            "filters": ["require_debug_false"],
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': "log/error.log",
+            'maxBytes': 1024 * 1024 * 10,
+            'backupCount': 5,   # 最多保留5个文件
+            'formatter': 'simple',
+            'encoding': 'utf-8',
+        },
+        'access': {  # Info级别以上保存到日志文件
+            'level': 'DEBUG',
+            # "filters": ["require_debug_false"],
+            'class': 'logging.handlers.RotatingFileHandler',  # 保存到文件，根据文件大小自动切
+            'filename': "log/access.log",  # 日志文件
+            'maxBytes': 1024 * 1024 * 10,  # 日志大小 10M
+            'backupCount': 5,
+            'formatter': 'simple',  # 简单格式
+            'encoding': 'utf-8',
+        },
+        "console": {  # 打印到终端console
+            "level": "DEBUG",
+            "class": "logging.StreamHandler",
+            "formatter": "verbose",
+        },
+    },
+    "root": {"level": "INFO", "handlers": ["console"]},
+    "loggers": {
+        "": {
+            "handlers": ["access"],
+            "level": "DEBUG",
+            "propagate": True,
+        },
+        "django.request": {  # Django的request发生error会自动记录
+            "handlers": ["exception"],
+            "level": "ERROR",
+            "propagate": True,  # 向不向更高级别的logger传递
+        },
+        "django.security.DisallowedHost": {  # 对于不在 ALLOWED_HOSTS 中的请求不发送报错邮件
+            "level": "ERROR",
+            "handlers": ["exception"],
+            "propagate": True,
+        },
+    },
+}
