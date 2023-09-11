@@ -1,5 +1,4 @@
 from django.shortcuts import render
-from django.http import HttpResponse
 from django.views.decorators.http import require_safe, require_POST
 from back.models import Tool
 
@@ -9,10 +8,6 @@ from pytool import variables
 
 # Create your views here.
 
-
-@require_safe
-def index(request):
-    return HttpResponse('Hello, world')
 
 
 @require_safe
