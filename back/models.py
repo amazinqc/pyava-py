@@ -1,6 +1,13 @@
+from typing import Callable, Dict, List
+
 from django.db import models
+from django.db.models import signals
+from django.forms import ValidationError
+
+from pytool.parse import parseargs
 
 from .json import Jsonify
+from .utils import cached, cachewith, codenv
 
 # Create your models here.
 
@@ -21,19 +28,34 @@ class Tool(models.Model, Jsonify):
     create_time = models.DateTimeField("创建时间", auto_now_add=True)
 
     def __str__(self) -> str:
-        return '<%03d><%s>...' % (self.id, self.name)
+        return '<%03d><%s>...' % (self.id or 0, self.name)
 
-    def code(self) -> (str, str):
-        '''
-        自定义后台显示字段，超长代码缩略显示
-        '''
-        if len(self.cmd) > 60:
-            return f'{self.cmd[:60]}...'
-        return self.cmd
+    def json(self) -> Dict[str, str]:
+        return {'id': self.id, 'name': self.name, 'code': self.cmd, 'args': self.args()}
 
-    def json(self) -> dict:
-        return {'id': self.id, 'name': self.name, 'code': self.cmd}
-    
+    @property
+    # @cached # Error pickle! TODO custom
+    def code(self) -> Callable:
+        exec(self.cmd, envs := codenv())
+        if not callable(code := envs.get('code', None)):
+            raise TypeError(f'{code!r} is not a callable code')
+        return code
+
+    @cachewith('back.Tool', (signals.post_save, signals.post_delete))
+    def args(self) -> List[Dict[str, str]]:
+        '''
+        ```ts
+        arg = {name: ..., type?: ..., default?: ..., desc?: ...}
+        ```
+        '''
+        return parseargs(self.code)
+
+    def clean(self) -> None:
+        try:
+            self.code
+        except BaseException as e:
+            raise ValidationError(e)
+
     class Meta:
         verbose_name = '测试功能'
         verbose_name_plural = '测试列表'
@@ -47,7 +69,7 @@ class Server(models.Model):
 
     def __str__(self) -> str:
         return f'{self.name}<{self.sid}>'
-    
+
     class Meta:
         verbose_name = '服务器'
         verbose_name_plural = '服务器列表'

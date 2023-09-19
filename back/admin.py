@@ -1,23 +1,32 @@
 from typing import Any
+
 from django.contrib import admin
 from django.http.request import HttpRequest
-from .models import Tool, Server
+
+from .models import Server, Tool
 
 # Register your models here.
 
 
 class ToolAdmin(admin.ModelAdmin):
     readonly_fields = ['create_time', 'update_time']
-    list_display = ['name', 'code', 'type']
-    list_display_links = ['name']
+    list_display = ['name', 'abbr', 'type']
+    list_display_links = ['name', 'abbr']
     list_filter = ['update_time', 'type']
     search_fields = ('name',)
-    search_help_text = '搜索功能'
+    search_help_text = '按功能搜索'
     ordering = ['id']
     fieldsets = [
         ('详细数据', {"fields": ['name', 'type', 'cmd']}),
-        ('时间记录', {"classes": ['collapse'],"fields": readonly_fields})
+        ('时间记录', {"classes": ['collapse'], "fields": readonly_fields})
     ]
+
+    def abbr(self, tool: Tool) -> str:
+        '''
+        自定义后台显示字段，超长代码缩略显示
+        '''
+        return '\r\n'.join(f"{arg.get('desc') or arg.get('name')}:{arg.get('type', '')}={arg.get('default', '')}" for arg in tool.args())
+    abbr.short_description = '运行参数需求'
 
     def __str__(self):
         return '测试功能'
@@ -25,12 +34,16 @@ class ToolAdmin(admin.ModelAdmin):
 
 class ServerAdmin(admin.ModelAdmin):
 
-    def get_readonly_fields(self, request: HttpRequest, obj: Server = None) -> list[str] | tuple[Any, ...]:
+    fields = ['sid', 'name', 'host', 'port']
+
+    def get_readonly_fields(self, _: HttpRequest, obj: Server = None) -> list[str] | tuple[Any, ...]:
         if obj is None:
             return []
         return ['sid']
+
     def __str__(self):
         return '服务器列表'
+
 
 admin.site.register(Tool, ToolAdmin)
 admin.site.register(Server, ServerAdmin)

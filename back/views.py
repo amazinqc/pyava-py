@@ -1,44 +1,60 @@
+from django.core.handlers.wsgi import WSGIRequest
 from django.shortcuts import render
-from django.views.decorators.http import require_safe, require_POST
+from django.views import View
+from django.views.decorators.http import require_POST, require_safe
+
+import pytool
 from back.models import Tool
 
-from .json import Json, Error
-
-from pytool import variables
+from .json import Error, Json, json_request, json_response
+from .utils import codenv
 
 # Create your views here.
 
 
-
 @require_safe
-def tools(request):
+@json_response
+def tools(_: WSGIRequest):
     return Json(Tool.objects.all())
 
 
 @require_safe
-def tips(request):
-    return Json(variables())
+@json_response
+def hints(_: WSGIRequest):
+    return Json({key: type(val).__name__ for key, val in codenv().items()})
 
 
-@require_safe
-def code(request, id):
-    tool = Tool.objects.filter(pk=id).first()
-    if tool is None:
-        return Error("指令代码不存在")
-    return Json(tool)
+class CodeView(View):
+
+    @json_response
+    def get(self, _: WSGIRequest, id):
+        tool = Tool.objects.filter(pk=id).first()
+        if tool is None:
+            return Error("指令代码不存在")
+        return Json(tool)
+
+    @json_request
+    def post(self, raw_args: dict, id: int):
+        tool = Tool.objects.filter(pk=id).first()
+        if tool is None:
+            return Error("指令代码不存在")
+        args = tool.args()
+        for arg in args:
+            name = arg['name']
+            if 'default' not in arg and name not in raw_args:
+                return Error(f'缺少参数<{name}>')
+        return Json(tool.code(**raw_args))
 
 
 @require_POST
-def debug(request):
-    import json
-    draft: dict = json.loads(request.body)
+@json_request
+def debug(draft: dict):
     if 'code' not in draft:
         return Error("未识别的格式")
-    raw_code = f'from pytool import *\n{draft["code"]}'
-    from pytool import JavaAgent
-    import time
+    raw_code = draft["code"]
+    raw_args = draft.get('args', {})
 
-    class DebugAgent(JavaAgent):
+    class DebugAgent(pytool.JavaAgent):
 
         def __init__(self) -> None:
             pass
@@ -48,10 +64,13 @@ def debug(request):
 
     with DebugAgent():
         try:
-            exec(raw_code, envs := {})
-            if not callable(code := envs.get('code', None)):
-                return Error("未识别的代码")
-            return Json(code()) # todo parameters
+            tool = Tool(cmd=raw_code)
+            args = tool.args()
+            for arg in args:
+                name = arg['name']
+                if 'default' not in arg and name not in raw_args:
+                    return Error(f'缺少参数<{name}>')
+            return Json(tool.code(**raw_args))
         except BaseException as e:
             import logging
             logging.getLogger('back').error(draft, exc_info=e)

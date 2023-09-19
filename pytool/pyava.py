@@ -1,4 +1,4 @@
-from typing import Any, Dict
+from typing import Any, Dict, Self
 import json
 import copy
 
@@ -14,7 +14,7 @@ class Remote():
         self._method_chain_ = []
         self._args_chain_ = []
 
-    def __getattr__(self, _name: str) -> 'Remote':
+    def __getattr__(self, _name: str) -> Self:
         other = self._autofield_and_copy_()
         other._method_chain_.append(_name)
         return other
@@ -24,7 +24,7 @@ class Remote():
             return super().__setattr__(_name, val)
         unwrap(self.getClass().getDeclaredField(_name).set(self, val))
 
-    def __getitem__(self, key: str) -> 'Remote':
+    def __getitem__(self, key: str) -> Self:
         invoker, field = self._field_(key)
         return field.get(invoker)
 
@@ -32,21 +32,21 @@ class Remote():
         invoker, field = self._field_(key)
         unwrap(field.set(invoker, value))
 
-    def __call__(self, /, *args: Any) -> 'Remote':
+    def __call__(self, /, *args: Any) -> Self:
         self._args_chain_.append(tuple(args))
         return self
 
     def __repr__(self) -> str:
         return str(self._invoke_())
 
-    def __deepcopy__(self, memo: Dict) -> 'Remote':
+    def __deepcopy__(self, memo: Dict) -> Self:
         copied = Remote()
         copied._data_.update(self._data_)
         copied._method_chain_.extend(self._method_chain_)
         copied._args_chain_.extend(self._args_chain_)
         return copied
 
-    def _autofield_and_copy_(self) -> 'Remote':
+    def _autofield_and_copy_(self) -> Self:
         other = copy.deepcopy(self)
         if len(other._method_chain_) > len(other._args_chain_):
             last_field = other._method_chain_.pop()
@@ -68,7 +68,7 @@ class Remote():
         else:
             return {'warn': 'NoAgent'}
 
-    def _field_(self, field: str) -> ('Remote', 'Remote'):
+    def _field_(self, field: str) -> (Self, Self):
         clz = self.getClass()
         selfIsClass = is_class(clz)
         if selfIsClass:
@@ -82,13 +82,13 @@ class Remote():
                 return self, field
             clz = clz.getSuperclass()
 
-    def _clazz_(self, clazz: str) -> 'Remote':
+    def _clazz_(self, clazz: str) -> Self:
         if self._data_:
             raise ValueError("已实例的对象不可以重复使用")
         self._data_['class'] = clazz
         return self
 
-    def _enum_(self, enum, target: str or int = 0) -> 'Remote':
+    def _enum_(self, enum, target: str or int = 0) -> Self:
         if self._data_:
             raise ValueError("已实例的对象不可以重复使用")
         if target is None:
