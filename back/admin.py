@@ -3,9 +3,15 @@ from typing import Any
 from django.contrib import admin
 from django.http.request import HttpRequest
 
-from .models import Server, Tool
+from .models import Server, Tool, TypeChoice
 
 # Register your models here.
+
+class TypeAdmin(admin.ModelAdmin):
+    list_filter = ['option']
+
+    def has_delete_permission(self, request: HttpRequest, obj = None) -> bool:
+        return not (obj and obj.tool_set.exists())
 
 
 class ToolAdmin(admin.ModelAdmin):
@@ -45,6 +51,7 @@ class ServerAdmin(admin.ModelAdmin):
         return '服务器列表'
 
 
+admin.site.register(TypeChoice, TypeAdmin)
 admin.site.register(Tool, ToolAdmin)
 admin.site.register(Server, ServerAdmin)
 admin.site.site_header = "测试后台管理"

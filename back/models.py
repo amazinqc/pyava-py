@@ -1,4 +1,4 @@
-from typing import Callable, Dict, List
+from typing import Any, Callable, Dict, List
 
 from django.db import models
 from django.db.models import signals
@@ -12,18 +12,35 @@ from .utils import cached, cachewith, codenv
 # Create your models here.
 
 
-class Tool(models.Model, Jsonify):
+class TypeChoice(models.Model, Jsonify):
 
-    class TypeChoices(models.IntegerChoices):
+    class OptionChoices(models.IntegerChoices):
         GENERIC = 0, '通用'
         SYSTEM = 1, '系统'
         MANAGER = 2, '功能'
         MODULE = 3, '模块'
 
+    type = models.AutoField("类型", primary_key=True)
+    option = models.IntegerField('类型选项', choices=OptionChoices.choices)
+    desc = models.CharField('分类描述', max_length=200)
+
+    def __str__(self) -> str:
+        return self.desc
+
+    def json(self) -> dict:
+        return {'type': self.type, 'option': self.option, 'desc': self.desc}
+
+    class Meta:
+        verbose_name = '测试分类'
+        verbose_name_plural = '分类列表'
+
+
+class Tool(models.Model, Jsonify):
+
     name = models.CharField('功能', max_length=200, help_text='功能名称')
     cmd = models.TextField('内容', blank=True, help_text='测试指令代码')
-    type = models.IntegerField(
-        "类型分类", choices=TypeChoices.choices, default=TypeChoices.GENERIC, help_text='功能分类')
+    type = models.ForeignKey(TypeChoice, on_delete=models.SET_DEFAULT,
+                             default=None, verbose_name="分类", help_text="用于测试功能的区分和组合")
     update_time = models.DateTimeField("更新时间", auto_now=True)
     create_time = models.DateTimeField("创建时间", auto_now_add=True)
 
@@ -61,14 +78,17 @@ class Tool(models.Model, Jsonify):
         verbose_name_plural = '测试列表'
 
 
-class Server(models.Model):
+class Server(models.Model, Jsonify):
     sid = models.IntegerField(verbose_name='服务器', primary_key=True)
     name = models.CharField(verbose_name='名称', max_length=200)
-    host = models.GenericIPAddressField(verbose_name='地址', protocol='IPv4', null=False)
+    host = models.GenericIPAddressField(verbose_name='地址', protocol='IPv4')
     port = models.IntegerField(verbose_name='端口', default=3334)
 
     def __str__(self) -> str:
         return f'{self.name}<{self.sid}>'
+
+    def json(self) -> Dict[str, str]:
+        return {'sid': self.sid, 'name': self.name}
 
     class Meta:
         verbose_name = '服务器'
