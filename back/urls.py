@@ -8,8 +8,9 @@ app_name = 'back'
 urlpatterns = [
     path("code/tools", (views.tools), name="tools"),
     path("code/options", (views.options), name="options"),
+    path("code/options/<int:option_id>", (views.options), name="options"),
     path("code/servers", (views.servers), name="servers"),
-    path("code/tips", (views.hints), name="hints"),
+    path("code/hints", (views.hints), name="hints"),
     path('code/<int:id>', views.CodeView.as_view(), name='code'),
     path('code/debug', views.debug, name='debug'),
 ]

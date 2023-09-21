@@ -3,7 +3,7 @@ from django.shortcuts import render
 from django.views import View
 from django.views.decorators.http import require_POST, require_safe
 
-import pytool
+from pytool.agent import JavaAgent
 from back.models import Server, Tool, TypeChoice
 
 from .json import Error, Json, json_request, json_response
@@ -14,8 +14,10 @@ from .utils import codenv
 
 @require_safe
 @json_response
-def options(_: WSGIRequest):
-    return Json(TypeChoice.objects.all())
+def options(_: WSGIRequest, option_id=None):
+    if option_id is None:
+        return Json(TypeChoice.objects.all())
+    return Json(TypeChoice.objects.filter(option=option_id))
 
 
 @require_safe
@@ -63,7 +65,7 @@ class CodeView(View):
             name = arg['name']
             if 'default' not in arg and name not in raw_args:
                 return Error(f'缺少参数<{name}>')
-        with pytool.JavaAgent(f'http://{server.host}:{server.port}/{self.AGENT_PATH}'):
+        with JavaAgent(f'http://{server.host}:{server.port}/{self.AGENT_PATH}'):
             return Json(tool.code(**raw_args))
 
 
@@ -75,15 +77,17 @@ def debug(draft: dict):
     raw_code = draft["code"]
     raw_args = draft.get('args', {})
 
-    class DebugAgent(pytool.JavaAgent):
+    class DebugAgent(JavaAgent):
 
-        def __init__(self) -> None:
-            pass
+        def __init__(self, agent: bool = False) -> None:
+            if agent:
+                super().__init__('http://127.0.0.1:3334/LocalTest')
+            self.agent = agent
 
         def debug(self, **kvargs) -> dict:
-            return {'code': 200, 'data': kvargs}
+            return super().debug(**kvargs) if self.agent else {'code': 200, 'data': kvargs}
 
-    with DebugAgent():
+    with DebugAgent(True):
         try:
             tool = Tool(cmd=raw_code)
             args = tool.args()

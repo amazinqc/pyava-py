@@ -51,5 +51,7 @@ def json_response(view):
         try:
             return view(*args, **kwargs)
         except BaseException as e:
+            import logging
+            logging.getLogger('back').error('执行异常', exc_info=e)
             return Error(str(e))
     return wrapper
