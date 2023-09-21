@@ -1,4 +1,5 @@
 from pytool import *
+from pytool.agent import JavaAgent
 
 
 # import json

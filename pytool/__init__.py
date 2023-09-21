@@ -1,5 +1,4 @@
-from .pyava import Remote, Class, Enum, ok, unwrap, is_class_object, is_class, Long, Integer
-from .agent import JavaAgent
+from .pyava import Class, Enum, ok, unwrap, is_class_object, is_class, Long, Integer
 from .tools import *
 from .parse import Param
 
