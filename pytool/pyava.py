@@ -2,7 +2,7 @@ from typing import Any, Dict, Self
 import json
 import copy
 
-from .agent import JavaAgent
+from .agent import Agent
 
 
 class Remote():
@@ -62,7 +62,7 @@ class Remote():
         return data
 
     def _invoke_(self) -> Dict:
-        agent = JavaAgent.SHARED
+        agent = Agent._SHARED
         if agent is not None:
             return agent.debug(**self._collect_())
         else:

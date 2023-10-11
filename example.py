@@ -90,7 +90,122 @@ if __name__ == '__main__':
             scope(csys.setProperty('b', cstr.valueOf(zero)))
             scope(a, mark=True)
             # Long(2 ** 10).value = 2 ** 10
-            Long(2 ** 10).value = Scope(Long(2 ** 10))
+            Long(2 ** 10).value = scope(Long(2 ** 10))
         r = scope.unwrap()
-    print(r)
+    print(json.dumps(json.loads(r), indent=2))
+    '''
+```json
+{
+  "chains": [
+    {
+      "ref": "java.lang.System",
+      "type": "class",
+      "local": "$1"
+    },
+    {
+      "method": "setProperty",
+      "args": [
+        "b",
+        {
+          "chains": [
+            {
+              "ref": "java.lang.String",
+              "type": "class"
+            },
+            {
+              "method": "valueOf",
+              "args": [
+                {
+                  "chains": [
+                    {
+                      "ref": "java.lang.Integer",
+                      "type": "class"
+                    },
+                    {
+                      "method": "valueOf",
+                      "args": [
+                        0
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "local",
+      "ref": "$1"
+    },
+    {
+      "method": "getProperty",
+      "args": [
+        "a",
+        "default a"
+      ],
+      "local": "$2"
+    },
+    {
+      "ref": "java.lang.Long",
+      "type": "class"
+    },
+    {
+      "method": "valueOf",
+      "args": [
+        1024
+      ],
+      "local": "$3"
+    },
+    {
+      "method": "getClass",
+      "args": []
+    },
+    {
+      "method": "getDeclaredField",
+      "args": [
+        "value"
+      ]
+    },
+    {
+      "method": "set",
+      "args": [
+        {
+          "type": "local",
+          "ref": "$3"
+        },
+        {
+          "chains": [
+            {
+              "ref": "java.lang.Long",
+              "type": "class"
+            },
+            {
+              "method": "valueOf",
+              "args": [
+                1024
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ref": "java.util.Arrays",
+      "type": "class"
+    },
+    {
+      "method": "asList",
+      "args": [
+        {
+          "type": "local",
+          "ref": "$2"
+        }
+      ]
+    }
+  ]
+}
+```
+    '''
 
