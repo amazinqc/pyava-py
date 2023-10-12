@@ -60,6 +60,10 @@ class AgentModuleAccessor:
         sys.modules.pop(self.__AGENT_MODULE_NAME__, None)
 
 
+class AgentError(BaseException):
+    pass
+
+
 class Agent:
 
     _SHARED: Self = AgentThreadLocalAccessor()
@@ -67,18 +71,21 @@ class Agent:
     '''
 
     @staticmethod
-    def unwrap(data: Dict[str, Any]) -> Any:
-        if data.get('code') == 200:
-            return data.get('data')
-        raise SystemError(data)
+    def unwrap(data) -> Any:
+        '''执行目标方法，并解包返回数据'''
+        ret = Agent.invoke(data)
+        if ret.get('code') == 200:
+            return ret.get('data')
+        raise AgentError(ret)
 
     @classmethod
     def invoke(cls, data):
+        '''执行目标方法，返回可能附带额外信息的结果'''
         agent = cls._SHARED
         if agent is not None:
             return agent.debug(data)
         else:
-            return {'DEBUG': data}
+            return {'No Agent': data}
 
     def debug(self, data) -> dict[str, Any]:
         pass
@@ -114,4 +121,3 @@ class HttpAgent(Agent):
             return r.json()
         except:
             return {'code': 404, 'message': r.text}
-

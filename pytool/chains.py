@@ -1,9 +1,8 @@
 import json
 from functools import wraps
-from json import JSONEncoder
-from typing import Any, Callable, Dict, Generator, List, Self, Tuple
+from typing import Any, Callable, Dict, Generator, List, Self, Tuple, override
 
-from pytool.agent import Agent
+from pytool.agent import Agent, AgentError
 
 
 def namespace[R](func: Callable[..., R]):
@@ -19,11 +18,13 @@ class ChainMixin:
 
     __slots__ = ()
 
+    @override
     def __getattr__(self, name: str) -> 'Accessor':
         if name in self.__slots__:
             return super().__getattr__(name)
         return Accessor(self, name=name)
 
+    @override
     def __setattr__(self, name: str, val: Any):
         if name in self.__slots__:
             return super().__setattr__(name, val)
@@ -66,16 +67,26 @@ class ChainMixin:
     @namespace
     def invoke(self) -> Dict[str, Any]:
         self._try_freeze()
-        data = jsonify(chainify(self, markers := {}))
-        return Agent.invoke(json.dumps(data, cls=Jsonify, markers=markers))
+        return Agent.invoke(Jsonify.dumps(self))
 
     @namespace
     def unwrap(self) -> Any:
-        return Agent.unwrap(self.invoke())
+        self._try_freeze()
+        return Agent.unwrap(Jsonify.dumps(self))
 
     @namespace
     def is_ok(self) -> bool:
-        return self.invoke().get('code') == 200
+        try:
+            self.unwrap()
+            return True
+        except AgentError:
+            return False
+
+    @namespace
+    def scope(self, scope: 'Scope', mark: bool = False) -> Self:
+        '''方便链式调用过程中加入作用域'''
+        scope(self, mark=mark)
+        return self
 
     # @namespace
     # def is_object_class(self) -> bool:
@@ -121,6 +132,7 @@ class Entry(ChainNode):
         self._local = local
         self._front = front
 
+    @override
     def __json__(self, markers=None) -> Dict:
         json = {'ref': self._ref, 'type': self._type}
         if self._local:
@@ -149,6 +161,7 @@ class Accessor(ChainNode):
         self._local = local
         return self
 
+    @override
     def __json__(self, markers=None) -> Dict:
         json = {
             'method': self._name,
@@ -158,6 +171,7 @@ class Accessor(ChainNode):
             json['local'] = self._local
         return json
 
+    @override
     def _try_freeze(self):
         # 转变为对象字段调用
         if self._args is not None:
@@ -183,7 +197,7 @@ class Scope:
         self._marked = None
 
     def mark(self, node: ChainNode = None):
-        '''标记当前节点（默认最后一个节点）需要返回值
+        '''标记当前节点（默认最后一个节点的返回值）需要返回值
 
         通常在需要返回中间值，或者返回多值时主动标记返回的对象
         '''
@@ -203,11 +217,7 @@ class Scope:
             raise ValueError('Scope作用域为空')
         if self._marked:
             chains.append(Class('java.util.Arrays').asList(*self._marked))
-        markers = {}
-        data = []
-        for chain in chains:
-            data += chainify(chain=chain, markers=markers)
-        return Agent.unwrap(Agent.invoke(json.dumps(jsonify(data), cls=Jsonify, markers=markers)))
+        return Agent.unwrap(Jsonify.dumps(chains))
 
     def __call__(self, node: ChainNode | Any, mark: bool = False) -> Self:
         '''标记作用域
@@ -233,14 +243,16 @@ class Scope:
         pass
 
 
-def Class(clz: str, local: str = None, front: ChainNode = None) -> Entry:
-    return Entry('class', clz, local, front)
+def Class(clz: str, local: str = None) -> Entry:
+    return Entry('class', clz, local)
 
 
-def Enum(clz: str, target: str | int = 0, local: str = None, front: ChainNode = None) -> Accessor:
+def Enum(clz: str, target: str | int = 0, local: str = None) -> Accessor:
     if isinstance(target, int):
-        return Class('java.lang.reflect.Array', front=front).get(Class(clz).getEnumConstants(), target, local=local)
-    return Class(clz, front=front).valueOf(target, local=local)
+        return Class('java.lang.reflect.Array').get(Class(clz).getEnumConstants(), target, local=local)
+    if isinstance(target, str):
+        return Class(clz).valueOf(target, local=local)
+    raise ValueError('枚举对象必须是`int`或`str`类型')
 
 
 def Local(ref: str) -> Entry:
@@ -310,12 +322,12 @@ def flatten_mark(node: ChainNode, markers: Dict[ChainNode, bool]) -> Generator[C
     yield node
 
 
-def chainify(chain: ChainNode, markers: Dict[ChainNode, bool | Dict] = None, markable: bool = True):
+def chainify(chains: ChainNode | List[ChainNode], markers: Dict[ChainNode, bool | Dict] = None, markable: bool = True) -> Tuple[ChainNode, ...]:
     '''节点链式展开
 
     参数
     ---
-    chain: ChainNode
+    chain: ChainNode | List[ChainNode]
         展开链节点
     markers: Dict[ChainNode, Marker | Accessor]
         标记统计池，可选是否启用标记扫描算法
@@ -323,12 +335,18 @@ def chainify(chain: ChainNode, markers: Dict[ChainNode, bool | Dict] = None, mar
         是否可修改节点标记，避免参数节点的延迟展开（二次标记）导致错误的重复标记
     ---
     '''
+    single = isinstance(chains, ChainNode)
     if markers is None:
-        return tuple(flatten(chain))
+        return tuple(flatten(chains) if single else _merge(flatten(chain) for chain in chains))
     elif markable:
-        return tuple(flatten_mark(chain, markers))
+        return tuple(flatten_mark(chains, markers) if single else _merge(flatten_mark(chain, markers) for chain in chains))
     else:
-        return tuple(flatten_scan(chain, markers))
+        return tuple(flatten_scan(chains, markers) if single else _merge(flatten_scan(chain, markers) for chain in chains))
+
+
+def _merge(nodes):
+    for chain in nodes:
+        yield from chain
 
 
 def jsonify(chains: Tuple[ChainNode, ...]):
@@ -337,7 +355,7 @@ def jsonify(chains: Tuple[ChainNode, ...]):
     return {'chains': chains}
 
 
-class Jsonify(JSONEncoder):
+class Jsonify(json.JSONEncoder):
 
     def __init__(self, *args, markers: Dict[ChainNode, bool | Dict] = None, **kwargs):
         self.markers = markers
@@ -361,3 +379,7 @@ class Jsonify(JSONEncoder):
                 self.markers[obj] = {'type': 'local', 'ref': local}
             return json
         return super().default(obj)
+
+    @classmethod
+    def dumps(cls, chains: ChainNode | List[ChainNode]) -> str:
+        return json.dumps(jsonify(chainify(chains, markers := {})), cls=cls, separators=(',', ':'), markers=markers)
