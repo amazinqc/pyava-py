@@ -3,8 +3,6 @@ from pytool.agent import Agent, HttpAgent
 from pytool.chains import *
 
 
-
-
 '''
 收集器
 [
@@ -81,18 +79,21 @@ if __name__ == '__main__':
     with DebugInPy('Local Debug Only') as agent:
         ...
 
-    # with HttpAgent('http://127.0.0.1/LocalDebugTest'):
+    with HttpAgent('http://127.0.0.1:8080/Local'):
         with Scope() as scope:
             zero = Integer(0)
-            csys = Class('java.lang.System')
-            a = csys.getProperty('a', 'default a')
-            cstr = Class('java.lang.String')
-            scope(csys.setProperty('b', cstr.valueOf(zero)))
-            scope(a, mark=True)
+            # csys = Class('java.lang.System')
+            # a = csys.getProperty('a', 'default a')
+            # cstr = Class('java.lang.String')
+            # scope(csys.setProperty('b', cstr.valueOf(zero)))
+            # scope(a, mark=True)
             # Long(2 ** 10).value = 2 ** 10
-            Long(2 ** 10).value = scope(Long(2 ** 10))
+            scope(Class('java.util.Arrays').asList(0, 1, 2))
+            it = Iter()
+            it.filter(it.equals(1)).map(it.sum(0, 20)).collect()
+            scope(it)
         r = scope.unwrap()
-    print(json.dumps(json.loads(r), indent=2))
+    print(r)
     '''
 ```json
 {
@@ -208,4 +209,3 @@ if __name__ == '__main__':
 }
 ```
     '''
-

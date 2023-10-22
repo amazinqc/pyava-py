@@ -123,7 +123,7 @@ class Entry(ChainNode):
         ---
         type: str
             可选项：`local`, `class`, `self`, `iter`
-        ref: str | Dict[str, str]
+        ref: str | Dict
             字符串数据，或者对象描述数据，如类名，变量名（待定）
         ---
         '''
@@ -145,7 +145,7 @@ class Accessor(ChainNode):
     __slots__ = ('_name', '_args') + ChainNode.__slots__
 
     def __init__(self, front: ChainNode, name: str):
-        front._try_freeze()
+        front and front._try_freeze()
         self._name = name
         self._args = None
         self._local = None
@@ -185,9 +185,51 @@ class Accessor(ChainNode):
         self._local = None
 
 
-class Iter(ChainNode):
+class Iter(Accessor):
 
-    pass
+    __slots__ = ('_ref', '_args') + ChainNode.__slots__
+
+    def __init__(self) -> None:
+        self._front = None
+        self._local = None
+        self._ref = []
+        self._args = []
+
+    def __getattr__(self, name: str) -> Accessor:
+        if name in self.__slots__:
+            return super().__getattr__(name)
+        return Accessor(None, name=name)
+
+    def filter(self, action: ChainNode):
+        self._ref.append('filter')
+        self._args.append(action)
+        return self
+
+    def map(self, action: ChainNode):
+        self._ref.append('map')
+        self._args.append(action)
+        return self
+
+    def foreach(self, action: ChainNode):
+        self._ref.append('foreach')
+        self._args.append(action)
+        return self
+
+    def collect(self):
+        self._ref.append('collect')
+        self._args.append(None)
+
+    def __json__(self, markers=None) -> Dict:
+        json = {'type': 'iter'}
+        json['ref'] = [
+            {
+                'type': t,
+                'chains': chainify(n, markers, False)
+            } if n else {
+                'type': t
+            } for t, n in zip(self._ref, self._args)
+        ]
+        return json
 
 
 class Scope:

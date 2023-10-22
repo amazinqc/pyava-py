@@ -116,7 +116,7 @@ class HttpAgent(Agent):
         self.timeout = timeout
 
     def debug(self, data) -> Dict[str, Any]:
-        r = requests.post(self.url, f'json={data}', timeout=self.timeout)
+        r = requests.post(self.url, json={'json': data}, timeout=self.timeout)
         try:
             return r.json()
         except:
