@@ -1,11 +1,16 @@
 import json
-from functools import wraps
 from typing import Any, Callable, Dict, Generator, List, Self, Tuple, override
 
-from pytool.agent import Agent, AgentError
+from .agent import Agent, AgentError
+
+__all__ = (
+    'Entry', 'Accessor', 'Local', 'Class', 'Enum', 'Scope', 'Iter'
+)
 
 
-def namespace[R](func: Callable[..., R]):
+def namespace[R: Callable[...]](func: R) -> R:
+    from functools import wraps
+
     @wraps(func)
     def wrapper(*args, proxy=False, **kwargs) -> R | Any:
         if proxy:
@@ -19,7 +24,7 @@ class ChainMixin:
     __slots__ = ()
 
     @override
-    def __getattr__(self, name: str) -> 'Accessor':
+    def __getattr__(self, name: str):
         if name in self.__slots__:
             return super().__getattr__(name)
         return Accessor(self, name=name)
@@ -33,13 +38,13 @@ class ChainMixin:
         else:
             self.getClass().getDeclaredField(name).set(self, val).unwrap()
 
-    # def __getitem__(self, key: str) -> Self:
-    #     invoker, field = self.field_search(key)
-    #     return field.get(invoker)
+    def __getitem__(self, key: str):
+        invoker, field = self.field_search(key)
+        return field.get(invoker)
 
-    # def __setitem__(self, key: str, value: Any) -> None:
-    #     invoker, field = self.field_search(key)
-    #     self.unwrap(field.set(invoker, value))
+    def __setitem__(self, key: str, value: Any):
+        invoker, field = self.field_search(key)
+        self.unwrap(field.set(invoker, value))
 
     def __call__(self, /, *args: Any, local: str = None) -> Self:
         raise NotImplementedError(f'{self.__class__.__name__}未实现调用逻辑')
@@ -52,7 +57,7 @@ class ChainMixin:
         pass
 
     @namespace
-    def field_search(self, name: str) -> (Self | None, Self):
+    def field_search(self, name: str):
         if self.is_class():
             return None, self.getDeclaredField(name)
         clz = self.getClass()
@@ -88,13 +93,13 @@ class ChainMixin:
         scope(self, mark=mark)
         return self
 
-    # @namespace
-    # def is_object_class(self) -> bool:
-    #     return Class('java.lang.Object').equals(self).unwrap() is True
+    @namespace
+    def is_object_class(self) -> bool:
+        return Class('java.lang.Object').equals(self).unwrap() is True
 
-    # @namespace
-    # def is_class(self) -> bool:
-    #     return Class('java.lang.Class').isAssignableFrom(self.getClass()).unwrap() is True
+    @namespace
+    def is_class(self) -> bool:
+        return Class('java.lang.Class').isAssignableFrom(self.getClass()).unwrap() is True
 
 
 class ChainNode(ChainMixin):
@@ -299,14 +304,6 @@ def Enum(clz: str, target: str | int = 0, local: str = None) -> Accessor:
 
 def Local(ref: str) -> Entry:
     return Entry('local', ref)
-
-
-def Integer(val: int | str) -> Accessor:
-    return Class('java.lang.Integer').valueOf(val)
-
-
-def Long(val: int | str) -> Accessor:
-    return Class('java.lang.Long').valueOf(val)
 
 
 def flatten(node: ChainNode) -> Generator[ChainNode, None, None]:

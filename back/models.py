@@ -4,7 +4,7 @@ from django.db import models
 from django.db.models import signals
 from django.forms import ValidationError
 
-from pytool.parse import parseargs
+from pyava.parse import parseargs
 
 from .json import Jsonify
 from .utils import cached, cachewith, codenv
@@ -58,7 +58,6 @@ class Tool(models.Model, Jsonify):
             raise TypeError(f'{code!r} is not a callable code')
         return code
 
-    @cachewith('back.Tool', (signals.post_save, signals.post_delete))
     def args(self) -> List[Dict[str, str]]:
         '''
         ```ts
@@ -79,6 +78,7 @@ class Tool(models.Model, Jsonify):
 
 
 class Server(models.Model, Jsonify):
+
     sid = models.IntegerField(verbose_name='服务器', primary_key=True)
     name = models.CharField(verbose_name='名称', max_length=200)
     host = models.GenericIPAddressField(verbose_name='地址', protocol='IPv4')

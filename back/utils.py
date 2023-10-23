@@ -7,7 +7,7 @@ from django.db import models
 from django.db.models import signals
 from django.dispatch import receiver
 
-import pytool
+import pyava as pytool
 
 
 def codenv():

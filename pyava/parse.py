@@ -3,12 +3,14 @@ from typing import Callable, Dict, List
 
 _void = inspect.Signature.empty
 
+
 def parseargs(code: Callable) -> List[Dict[str, str]]:
     if not callable(code):
         raise TypeError(f'{code!r} is not a callable code')
     signature = inspect.signature(code)
     ps = getattr(code, '__args__', {})
     return [ps.get(name) or _extract(parameter) for name, parameter in signature.parameters.items()]
+
 
 def _extract(parameter: inspect.Parameter):
     info = {'name': parameter.name}
@@ -18,14 +20,15 @@ def _extract(parameter: inspect.Parameter):
         info['default'] = _encode(parameter.default)
     return info
 
+
 def _encode(ins):
     if isinstance(ins, type):
         return ins.__name__
     return str(ins)
 
-def Param(argname: str, type=_void, default=_void, desc:str=_void) -> Callable:
-    from functools import wraps
-    def decorator(code: Callable):
+
+def Param(argname: str, type=_void, default=_void, desc: str = _void):
+    def decorator[C: Callable](code: C) -> C:
         if (ps := getattr(code, '__args__', None)) is None:
             setattr(code, '__args__', ps := {})
         if argname in ps:
@@ -40,8 +43,5 @@ def Param(argname: str, type=_void, default=_void, desc:str=_void) -> Callable:
             info['default'] = default
         if desc is not _void:
             info['desc'] = desc
-        @wraps(code)
-        def wrapper(*args, **kwargs):
-            return code(*args, **kwargs)
-        return wrapper
+        return code
     return decorator

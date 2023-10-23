@@ -1,6 +1,6 @@
-from pytool.agent import Agent, HttpAgent
+from pyava.agent import Agent, HttpAgent
 
-from pytool.chains import *
+from pyava import *
 
 
 '''
@@ -79,7 +79,7 @@ if __name__ == '__main__':
     with DebugInPy('Local Debug Only') as agent:
         ...
 
-    with HttpAgent('http://127.0.0.1:8080/Local'):
+    # with HttpAgent('http://127.0.0.1:8080/Local'):
         with Scope() as scope:
             zero = Integer(0)
             # csys = Class('java.lang.System')

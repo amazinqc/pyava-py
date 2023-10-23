@@ -1,10 +1,11 @@
+from django.conf import settings
 from django.core.handlers.wsgi import WSGIRequest
 from django.shortcuts import render
 from django.views import View
 from django.views.decorators.http import require_POST, require_safe
 
-from pytool.agent import JavaAgent
 from back.models import Server, Tool, TypeChoice
+from pyava.agent import HttpAgent
 
 from .json import Error, Json, json_request, json_response
 from .utils import codenv
@@ -16,14 +17,14 @@ from .utils import codenv
 @json_response
 def options(_: WSGIRequest, option_id=None):
     if option_id is None:
-        return Json(TypeChoice.objects.all())
+        return Json(TypeChoice.objects.filter())
     return Json(TypeChoice.objects.filter(option=option_id))
 
 
 @require_safe
 @json_response
 def tools(_: WSGIRequest):
-    return Json(Tool.objects.all())
+    return Json(Tool.objects.exclude(id=settings.BASE_DEPENDENCY_ID))
 
 
 @require_safe
@@ -39,7 +40,6 @@ def hints(_: WSGIRequest):
 
 
 class CodeView(View):
-    AGENT_PATH = 'LocalTest'
 
     @json_response
     def get(self, _: WSGIRequest, id):
@@ -61,12 +61,17 @@ class CodeView(View):
 
         raw_args = raw_params.get('args', {})
         args = tool.args()
+        kwargs = {}
         for arg in args:
             name = arg['name']
-            if 'default' not in arg and name not in raw_args:
+            if name in raw_args:
+                kwargs[name] = raw_args[name]
+            elif 'default' not in arg:
                 return Error(f'缺少参数<{name}>')
-        with JavaAgent(f'http://{server.host}:{server.port}/{self.AGENT_PATH}'):
-            return Json(tool.code(**raw_args))
+            else:
+                pass
+        with HttpAgent(f'http://{server.host}:{server.port}/{settings.AGENT_PATH}'):
+            return Json(tool.code(**kwargs))
 
 
 @require_POST
@@ -76,27 +81,32 @@ def debug(draft: dict):
         return Error("未识别的格式")
     raw_code = draft["code"]
     raw_args = draft.get('args', {})
+    sid = draft.get('sid')
 
-    class DebugAgent(JavaAgent):
+    class DebugAgent(HttpAgent):
 
         def __init__(self, agent: bool = False) -> None:
             if agent:
-                super().__init__('http://127.0.0.1:3334/LocalTest')
+                super().__init__('http://127.0.0.1:8080/Local')
             self.agent = agent
 
-        def debug(self, **kvargs) -> dict:
-            return super().debug(**kvargs) if self.agent else {'code': 200, 'data': kvargs}
+        def debug(self, data) -> dict:
+            return super().debug(data) if self.agent else {'code': 200, 'data': data}
 
-    with DebugAgent(True):
-        try:
-            tool = Tool(cmd=raw_code)
-            args = tool.args()
-            for arg in args:
-                name = arg['name']
-                if 'default' not in arg and name not in raw_args:
-                    return Error(f'缺少参数<{name}>')
-            return Json(tool.code(**raw_args))
-        except BaseException as e:
-            import logging
-            logging.getLogger('back').error(draft, exc_info=e)
-            return Error(str(e))
+    if sid and (server := Server.objects.filter(pk=sid).first()):
+        agent = HttpAgent(f'http://{server.host}:{server.port}/{settings.AGENT_PATH}')
+    else:
+        agent = DebugAgent(True)
+    with agent:
+        tool = Tool(cmd=raw_code)
+        args = tool.args()
+        kwargs = {}
+        for arg in args:
+            name = arg['name']
+            if name in raw_args:
+                kwargs[name] = raw_args[name]
+            elif 'default' not in arg:
+                return Error(f'缺少参数<{name}>')
+            else:
+                pass
+        return Json(tool.code(**kwargs))

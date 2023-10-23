@@ -7,10 +7,14 @@ from .models import Server, Tool, TypeChoice
 
 # Register your models here.
 
-class TypeAdmin(admin.ModelAdmin):
-    list_filter = ['option']
 
-    def has_delete_permission(self, request: HttpRequest, obj = None) -> bool:
+class TypeAdmin(admin.ModelAdmin):
+    list_display = ['type', 'desc', 'option']
+    list_display_links = ['type', 'desc']
+    list_filter = ['option']
+    ordering = ['type']
+
+    def has_delete_permission(self, request: HttpRequest, obj=None) -> bool:
         return not (obj and obj.tool_set.exists())
 
 
@@ -31,7 +35,7 @@ class ToolAdmin(admin.ModelAdmin):
         '''
         自定义后台显示字段，超长代码缩略显示
         '''
-        return '\r\n'.join(f"{arg.get('desc') or arg.get('name')}:{arg.get('type', '')}={arg.get('default', '')}" for arg in tool.args())
+        return '\r\n'.join(f"{arg.get('desc') or arg.get('name')}: {arg.get('type', '')}={arg.get('default', '')}" for arg in tool.args())
     abbr.short_description = '运行参数需求'
 
     def __str__(self):
