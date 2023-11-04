@@ -1,5 +1,6 @@
 from typing import Any, Callable, Dict, List
 
+from django.conf import settings
 from django.db import models
 from django.db.models import signals
 from django.forms import ValidationError
@@ -7,7 +8,8 @@ from django.forms import ValidationError
 from pyava.parse import parseargs
 
 from .json import Jsonify
-from .utils import cached, cachewith, codenv
+from .utils import basenv, cached, cachewith
+
 
 # Create your models here.
 
@@ -53,7 +55,7 @@ class Tool(models.Model, Jsonify):
     @property
     # @cached # Error pickle! TODO custom
     def code(self) -> Callable:
-        exec(self.cmd, envs := codenv())
+        exec(self.cmd, envs := Tool.codenv(self.id))
         if not callable(code := envs.get('code', None)):
             raise TypeError(f'{code!r} is not a callable code')
         return code
@@ -71,6 +73,16 @@ class Tool(models.Model, Jsonify):
             self.code
         except BaseException as e:
             raise ValidationError(e)
+    
+    @staticmethod
+    def codenv(codeid=None):
+        '''代码执行依赖环境'''
+        if codeid == 0: # 基础依赖
+            return basenv()
+        base = Tool.objects.filter(id=0).first()
+        if base is None:
+            return basenv()
+        return base.code()
 
     class Meta:
         verbose_name = '测试功能'
@@ -89,6 +101,10 @@ class Server(models.Model, Jsonify):
 
     def json(self) -> Dict[str, str]:
         return {'sid': self.sid, 'name': self.name}
+
+    @property
+    def agent_url(self):
+        return 'http://%s:%d/%s' % (self.host, self.port, getattr(settings, 'AGENT_PATH', ''))
 
     class Meta:
         verbose_name = '服务器'

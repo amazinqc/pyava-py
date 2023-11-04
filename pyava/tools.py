@@ -9,9 +9,7 @@ def Long(val: int | str) -> Accessor:
     return Class('java.lang.Long').valueOf(val)
 
 
-def System() -> Accessor:
-    return Class('java.lang.System')
+System = Class('java.lang.System')
 
 
-def Objects() -> Accessor:
-    return Class('java.util.Objects')
+Objects = Class('java.util.Objects')

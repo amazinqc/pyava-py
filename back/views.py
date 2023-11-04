@@ -1,4 +1,3 @@
-from django.conf import settings
 from django.core.handlers.wsgi import WSGIRequest
 from django.shortcuts import render
 from django.views import View
@@ -8,7 +7,6 @@ from back.models import Server, Tool, TypeChoice
 from pyava.agent import HttpAgent
 
 from .json import Error, Json, json_request, json_response
-from .utils import codenv
 
 # Create your views here.
 
@@ -16,15 +14,18 @@ from .utils import codenv
 @require_safe
 @json_response
 def options(_: WSGIRequest, option_id=None):
+    choices = TypeChoice.objects.filter(type__gt=0)
     if option_id is None:
-        return Json(TypeChoice.objects.filter())
-    return Json(TypeChoice.objects.filter(option=option_id))
+        return Json(choices)
+    return Json(choices.filter(option=option_id))
 
 
 @require_safe
 @json_response
-def tools(_: WSGIRequest):
-    return Json(Tool.objects.exclude(id=settings.BASE_DEPENDENCY_ID))
+def codes(_: WSGIRequest, type_id=None):
+    if type_id is None:
+        return Json(Tool.objects.filter(id__gt=0))
+    return Json(Tool.objects.filter(type=type_id))
 
 
 @require_safe
@@ -36,7 +37,7 @@ def servers(_: WSGIRequest):
 @require_safe
 @json_response
 def hints(_: WSGIRequest):
-    return Json({key: type(val).__name__ for key, val in codenv().items()})
+    return Json({key: type(val).__name__ for key, val in Tool.codenv().items()})
 
 
 class CodeView(View):
@@ -70,7 +71,7 @@ class CodeView(View):
                 return Error(f'缺少参数<{name}>')
             else:
                 pass
-        with HttpAgent(f'http://{server.host}:{server.port}/{settings.AGENT_PATH}'):
+        with HttpAgent(server.agent_url):
             return Json(tool.code(**kwargs))
 
 
@@ -94,7 +95,7 @@ def debug(draft: dict):
             return super().debug(data) if self.agent else {'code': 200, 'data': data}
 
     if sid and (server := Server.objects.filter(pk=sid).first()):
-        agent = HttpAgent(f'http://{server.host}:{server.port}/{settings.AGENT_PATH}')
+        agent = HttpAgent(server.agent_url)
     else:
         agent = DebugAgent(True)
     with agent:

@@ -225,8 +225,5 @@ LOGGING = {
 
 # 本地应用程序配置
 
-# 自定义基础依赖的代码块id
-BASE_DEPENDENCY_ID = 2
-
 # 代理服务器的访问相对路径
 AGENT_PATH = 'Local'

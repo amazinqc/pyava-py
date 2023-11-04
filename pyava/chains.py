@@ -194,8 +194,9 @@ class Iter(Accessor):
 
     __slots__ = ('_ref', '_args') + ChainNode.__slots__
 
-    def __init__(self) -> None:
-        self._front = None
+    def __init__(self, front: ChainNode = None) -> None:
+        front and front._try_freeze()
+        self._front = front
         self._local = None
         self._ref = []
         self._args = []

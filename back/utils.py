@@ -1,28 +1,24 @@
 from functools import wraps
-from json import loads as todict
-from typing import Any, Callable, List, TypeVar
+from typing import Any, Callable, List
 
 from django.core.cache import cache as memory
 from django.db import models
 from django.db.models import signals
 from django.dispatch import receiver
 
-import pyava as pytool
+import pyava
 
 
-def codenv():
-    return {key: getattr(pytool, key) for key in pytool.__all__}
+def basenv():
+    return {key: getattr(pyava, key) for key in pyava.__all__}
 
 
-_R = TypeVar("_R")
-
-
-def cached(compute_func: Callable[[Any], _R]) -> Callable[[Any], _R]:
+def cached[R](compute_func: Callable[[Any], R]) -> Callable[[Any], R]:
     '''
     函数计算属性缓存，一般用于无参函数或者Model成员计算属性
     '''
     @wraps(compute_func)
-    def wrapper(*args, **kwargs) -> _R:
+    def wrapper(*args, **kwargs) -> R:
         if args and isinstance(model := args[0], models.Model):
             if model.pk:
                 key = compute_func.__qualname__ + ':' + _get_model_key(model)
@@ -47,7 +43,7 @@ def cachewith(model: models.Model | str, signal: signals.ModelSignal | List[sign
     '''
     绑定Model行为的函数计算缓存
     '''
-    def decorator(compute_func: Callable[[Any], _R]) -> Callable[[Any], _R]:
+    def decorator[R](compute_func: Callable[[Any], R]) -> Callable[[Any], R]:
 
         @receiver(signal=signal, sender=model)
         def remove(instance: models.Model, **kwargs):

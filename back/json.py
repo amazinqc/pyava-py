@@ -3,6 +3,7 @@ from functools import wraps
 from typing import Iterable
 
 from django.core.handlers.wsgi import WSGIRequest
+from django.db.models.query import QuerySet
 from django.http import JsonResponse
 
 
@@ -13,7 +14,7 @@ class Jsonify():
         pass
 
 
-def Json(data: Jsonify | dict):
+def Json(data: Jsonify | dict | QuerySet):
     return JsonResponse({'code': 200, 'data': jsonify(data), })
 
 
@@ -38,7 +39,8 @@ def json_request(view):
     @wraps(view)
     def wrapper(*args, **kwargs):
         try:
-            args = [loads(arg.body) if isinstance(arg, WSGIRequest) else arg for arg in args]
+            args = [loads(arg.body) if isinstance(
+                arg, WSGIRequest) else arg for arg in args]
         except decoder.JSONDecodeError:
             return Error('JSON解析错误')
         return view(*args, **kwargs)
