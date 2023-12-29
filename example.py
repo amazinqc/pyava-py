@@ -89,9 +89,8 @@ if __name__ == '__main__':
             # scope(a, mark=True)
             # Long(2 ** 10).value = 2 ** 10
             scope(Class('java.util.Arrays').asList(0, 1, 2))
-            it = Iter()
-            it.filter(it.equals(1)).map(it.sum(0, 20)).collect()
-            scope(it)
+
+            scope(Iter().filter(Empty().equals(1)).map(Empty().sum(0, 20)).collect())
         r = scope.unwrap()
     print(r)
     '''

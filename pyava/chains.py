@@ -4,7 +4,7 @@ from typing import Any, Callable, Dict, Generator, List, Self, Tuple, override
 from .agent import Agent, AgentError
 
 __all__ = (
-    'Entry', 'Accessor', 'Local', 'Class', 'Enum', 'Scope', 'Iter'
+    'Entry', 'Accessor', 'Local', 'Class', 'Enum', 'Scope', 'Iter', 'Empty',
 )
 
 
@@ -190,6 +190,17 @@ class Accessor(ChainNode):
         self._local = None
 
 
+class Empty(ChainNode):
+    '''空根节点，用于无根链节点
+    '''
+
+    @override
+    def __getattr__(self, name: str) -> Accessor:
+        if name in self.__slots__:
+            return super().__getattr__(name)
+        return Accessor(None, name=name)
+
+
 class Iter(Accessor):
 
     __slots__ = ('_ref', '_args') + ChainNode.__slots__
@@ -200,11 +211,6 @@ class Iter(Accessor):
         self._local = None
         self._ref = []
         self._args = []
-
-    def __getattr__(self, name: str) -> Accessor:
-        if name in self.__slots__:
-            return super().__getattr__(name)
-        return Accessor(None, name=name)
 
     def filter(self, action: ChainNode):
         self._ref.append('filter')
@@ -219,11 +225,11 @@ class Iter(Accessor):
     def foreach(self, action: ChainNode):
         self._ref.append('foreach')
         self._args.append(action)
-        return self
 
     def collect(self):
         self._ref.append('collect')
         self._args.append(None)
+        return self
 
     def __json__(self, markers=None) -> Dict:
         json = {'type': 'iter'}
