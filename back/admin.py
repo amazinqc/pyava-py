@@ -36,7 +36,7 @@ class ToolAdmin(admin.ModelAdmin):
         自定义后台显示字段，超长代码缩略显示
         '''
         try:
-            return '\r\n'.join(f"{arg.get('desc') or arg.get('name')}: {arg.get('type', '')}={arg.get('default', '')}" for arg in tool.args())
+            return '\r\n'.join(f"[{arg.get('desc') or arg.get('name')}: {arg.get('type', '')}={arg.get('default', '')}]" for arg in tool.args())
         except BaseException as e:
             return str(e)
     abbr.short_description = '运行参数需求'
