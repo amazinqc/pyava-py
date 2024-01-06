@@ -53,7 +53,7 @@ class ChainMixin:
     #     return str(self.invoke())
 
     def _try_freeze(self):
-        '''冻结节点，一般用于将Node属性转换为对象的字段访问'''
+        '''冻结不完整的简化操作节点，一般用于将Node属性简易访问转换为对象的字段访问'''
         pass
 
     @namespace
@@ -113,6 +113,7 @@ class ChainNode(ChainMixin):
     def __json__(self, markers=None) -> Dict:
         return {} if (local := self._local) is None else {'local': local}
 
+type Chains = ChainNode | List[ChainNode] | Tuple[ChainNode, ...]
 
 class Entry(ChainNode):
     '''
@@ -121,14 +122,14 @@ class Entry(ChainNode):
 
     __slots__ = ('_ref', '_type') + ChainNode.__slots__
 
-    def __init__(self, type: str, ref: str, local: str = None, front: ChainNode = None):
+    def __init__(self, type: str, ref: str | Chains | Dict, local: str = None, front: ChainNode = None):
         '''初始化入口对象
 
         参数
         ---
         type: str
             可选项：`local`, `class`, `self`, `iter`
-        ref: str | Dict
+        ref: str | Dict | Chains
             字符串数据，或者对象描述数据，如类名，变量名（待定）
         ---
         '''
@@ -139,7 +140,11 @@ class Entry(ChainNode):
 
     @override
     def __json__(self, markers=None) -> Dict:
-        json = {'ref': self._ref, 'type': self._type}
+        ref = self._ref
+        json = {
+            'ref': format(ref, markers, markable=False) if isinstance(ref, ChainNode) else ref,
+            'type': self._type
+        }
         if self._local:
             json['local'] = self._local
         return json
@@ -170,7 +175,7 @@ class Accessor(ChainNode):
     def __json__(self, markers=None) -> Dict:
         json = {
             'method': self._name,
-            'args': tuple(jsonify(chainify(o, markers, markable=False)) if isinstance(o, ChainNode) else o for o in self._args)
+            'args': tuple(format(o, markers, markable=False) if isinstance(o, ChainNode) else o for o in self._args)
         }
         if self._local:
             json['local'] = self._local
@@ -201,47 +206,64 @@ class Empty(ChainNode):
         return Accessor(None, name=name)
 
 
-class Iter(Accessor):
+def makefront(root: ChainNode, front: ChainNode):
+    while root._front:
+        root = root._front
+    root._front = front
 
-    __slots__ = ('_ref', '_args') + ChainNode.__slots__
 
-    def __init__(self, front: ChainNode = None) -> None:
-        front and front._try_freeze()
-        self._front = front
-        self._local = None
-        self._ref = []
-        self._args = []
+class Iter(Entry):
+    '''
+    ```
+    for Each in Iter:
+        ...
+    ```
+    '''
+    Each = Entry('local', '$_each_in_iter')
+    ''' Each In Iter '''
 
-    def filter(self, action: ChainNode):
-        self._ref.append('filter')
-        self._args.append(action)
+    def __init__(self, root: ChainNode, foreach: ChainNode = None):
+        super().__init__(type='iter', ref=foreach, front=root)
+
+    def tolist(self):
+        '''转化为ArrayList'''
+        list = Class('java.util.ArrayList').newInstance()
+        makefront(self._front, list)   # 创建ArrayList
+        self._ref = list.add(self._ref or Iter.Each)
         return self
 
-    def map(self, action: ChainNode):
-        self._ref.append('map')
-        self._args.append(action)
+    def tomap(self, key: ChainNode = None, value: ChainNode = None):
+        '''转化为HashMap
+
+        参数
+        ---
+        `key`  : 键映射，默认`Iter.Each`
+        `value`: 值映射，默认`Iter.Each`
+        ---
+        '''
+        map = Class('java.util.HashMap').newInstance()
+        makefront(self._front, map)
+        self._ref = map.put(key or Iter.Each, value or Iter.Each)
         return self
 
-    def foreach(self, action: ChainNode):
-        self._ref.append('foreach')
-        self._args.append(action)
-
-    def collect(self):
-        self._ref.append('collect')
-        self._args.append(None)
+    def filter(self, filter: ChainNode = None):
+        # TODO impl filter function depends on if-else function
         return self
 
-    def __json__(self, markers=None) -> Dict:
-        json = {'type': 'iter'}
-        json['ref'] = [
-            {
-                'type': t,
-                'chains': chainify(n, markers, False)
-            } if n else {
-                'type': t
-            } for t, n in zip(self._ref, self._args)
-        ]
-        return json
+
+class IfElse(Entry):
+
+    def __init__(self, condition: ChainNode):
+        # TODO impl if function
+        super().__init__('if', ref=condition)
+
+    def ifTrue(self, true: Chains = None):
+        # TODO impl if branch function
+        return self
+    
+    def ifFalse(self, false: ChainNode = None):
+        # TODO impl else branch function
+        return self
 
 
 class Scope:
@@ -297,58 +319,67 @@ class Scope:
         pass
 
 
-def Class(clz: str, local: str = None) -> Entry:
-    return Entry('class', clz, local)
+def Class(clz: str, local: str = None, front: ChainNode = None) -> Entry:
+    return Entry('class', clz, local, front=front)
 
 
-def Enum(clz: str, target: str | int = 0, local: str = None) -> Accessor:
+def Enum(clz: str, target: str | int = 0, local: str = None, front: ChainNode = None) -> Accessor:
     if isinstance(target, int):
-        return Class('java.lang.reflect.Array').get(Class(clz).getEnumConstants(), target, local=local)
+        return Class('java.lang.reflect.Array', front=front).get(Class(clz).getEnumConstants(), target, local=local)
     if isinstance(target, str):
-        return Class(clz).valueOf(target, local=local)
+        return Class(clz, front=front).valueOf(target, local=local)
     raise ValueError('枚举对象必须是`int`或`str`类型')
 
 
-def Local(ref: str) -> Entry:
-    return Entry('local', ref)
+def Local(ref: str, front: ChainNode = None) -> Entry:
+    return Entry('local', ref, front=front)
 
 
-def flatten(node: ChainNode) -> Generator[ChainNode, None, None]:
-    '''展开节点'''
+def flatten(node: ChainNode) -> Generator[ChainNode, Any, None]:
+    '''
+    展开链路节点
+
+        `flatten_mark` 与 `flatten_scan`通常是一起配合使用的，用于标记重复出现的节点并将后现的节点替换为前者的引用
+
+        `flatten`函数则直接展开，不论是否重复出现
+    '''
     if (front := node._front) is not None:
         yield from flatten(front)
     yield node
 
 
-def flatten_scan(node: ChainNode, markers: Dict[ChainNode, bool | Dict]) -> Generator[ChainNode, None, None]:
-    '''展开扫描节点'''
+def flatten_scan(node: ChainNode, markers: Dict[ChainNode, bool | Dict]) -> Generator[ChainNode, Any, None]:
+    '''
+    扫描并展开链路节点
+        一般是非主链路的分支节点，为了在已经统一标记的情况下，仅扫描节点并在合适的位置展开，不再重复标记
+    '''
     marker = markers.get(node)
     # 引用标记展开，避免参数节点首次展开被错误截止
+    # 只有在当前node节点已经存在引用替换节点时，才中断后续展开，直接返回（已经可替换表示后续都是重复节点，直接引用当前节点即可）
     if marker in (None, False, True):
+        # 只要是非引用替换节点状态，都需要继续尝试展开，因为此时还没有引用源节点链路（即引用替换节点的指向）
         if (front := node._front) is not None:
             yield from flatten_scan(front, markers)
     yield node
 
 
-def flatten_mark(node: ChainNode, markers: Dict[ChainNode, bool]) -> Generator[ChainNode, None, None]:
+def flatten_mark(node: ChainNode, markers: Dict[ChainNode, bool]) -> Generator[ChainNode, Any, None]:
     '''展开并标记节点
+        展开根链路节点，同时会标记所有扫描到的`ChainNode`节点
 
     参数
     ---
     `node: ChainNode`
-        展开链节点
+        展开链的根节点（结构上的尾节点，因为链节点是向前引用的）
 
     `markers: Dict[ChainNode, bool]`
         标记状态统计池
-            `False`: 待定标记
-
-            `True` : 确认标记
-
-    `remarkable: bool = True`
-        引用标记
+            `False`: 待定标记（首次录入后，待定是否会重复）
+            `True` : 确认标记(确认重复标记，在节点解释时可以复用引用)
+            `Dict` : 在节点序列化解释的过程中，可能会存在可复用的引用替换节点，属于原节点`True`状态的扩展数据
     ---
     函数返回值
-        节点展开的生成器
+        节点链路展开的生成器
     '''
     marker = markers.get(node)
 
@@ -356,49 +387,61 @@ def flatten_mark(node: ChainNode, markers: Dict[ChainNode, bool]) -> Generator[C
         # 录入前置节点
         if (front := node._front) is not None:
             yield from flatten_mark(front, markers)
-        # 扫描参数(待定引用标记)
+        # 扫描录入特殊引用节点
+        if isinstance(node, Entry) and isinstance(node._ref, ChainNode):
+            tuple(flatten_mark(node._ref, markers))
+        # 扫描录入参数内节点
         if isinstance(node, Accessor) and (args := node._args):
             for arg in args:
                 if isinstance(arg, ChainNode):
                     tuple(flatten_mark(arg, markers))
-        # 录入当前节点
+        # 录入当前节点为待定标记（已扫描但还不重复）
         markers[node] = False
     elif marker is False:   # ②待标记，直接确认标记
+        # 修改当前节点为重复标记
         markers[node] = True
     yield node
 
 
-def chainify(chains: ChainNode | List[ChainNode], markers: Dict[ChainNode, bool | Dict] = None, markable: bool = True) -> Tuple[ChainNode, ...]:
+def chainify(chains: ChainNode | List[ChainNode], markers: Dict[ChainNode, bool | Dict] = None, markable: bool = True):
     '''节点链式展开
 
     参数
     ---
     chain: ChainNode | List[ChainNode]
-        展开链节点
+        展开链节点的根
     markers: Dict[ChainNode, Marker | Accessor]
-        标记统计池，可选是否启用标记扫描算法
+        标记统计池，可选是否启用标记扫描算法。
     markable: bool
-        是否可修改节点标记，避免参数节点的延迟展开（二次标记）导致错误的重复标记
+        是否可修改节点标记，避免特殊的分支节点（非链路节点）在延迟展开。
+
+        `flatten_mark`会统一扫描标记所有的节点，而非链路节点只会在`__json__`内，再展开扫描。
+        所以展开时不能再二次标记（markable=False），否则导会致错误重复的标记，从而在节点解释时错误地判断引用替换，丢失引用源
     ---
     '''
-    single = isinstance(chains, ChainNode)
-    if markers is None:
-        return tuple(flatten(chains) if single else _merge(flatten(chain) for chain in chains))
-    elif markable:
-        return tuple(flatten_mark(chains, markers) if single else _merge(flatten_mark(chain, markers) for chain in chains))
-    else:
-        return tuple(flatten_scan(chains, markers) if single else _merge(flatten_scan(chain, markers) for chain in chains))
+    single = isinstance(chains, ChainNode)  # 单节点还是多节点(节点作用域)
+    if markers is None:  # 仅展开链节点即可
+        return flatten(chains) if single else _merge(flatten(chain) for chain in chains)
+    elif markable:      # 展开链节点，同时在markers内标记所有扫描的节点（包括非主链路节点）
+        return flatten_mark(chains, markers) if single else _merge(flatten_mark(chain, markers) for chain in chains)
+    else:               # 扫描并展开链节点到合适位置，不修改标记
+        return flatten_scan(chains, markers) if single else _merge(flatten_scan(chain, markers) for chain in chains)
 
 
 def _merge(nodes):
+    '''组合链路节点压缩合并'''
     for chain in nodes:
         yield from chain
 
 
-def jsonify(chains: Tuple[ChainNode, ...]):
-    if len(chains) == 1:
-        return chains[0]
-    return {'chains': chains}
+def format(chains: ChainNode | List[ChainNode], markers: Dict[ChainNode, bool | Dict] = None, markable: bool = True):
+    '''
+    格式化转译`ChainNode`节点链（或作用域），先转为简易的Dict格式，便于使用`Jsonify`生成可解读的json数据
+    '''
+    cs = tuple(chainify(chains, markers, markable))
+    if len(cs) == 1:
+        return cs[0]
+    return {'chains': cs}
 
 
 class Jsonify(json.JSONEncoder):
@@ -428,4 +471,4 @@ class Jsonify(json.JSONEncoder):
 
     @classmethod
     def dumps(cls, chains: ChainNode | List[ChainNode]) -> str:
-        return json.dumps(jsonify(chainify(chains, markers := {})), cls=cls, separators=(',', ':'), markers=markers)
+        return json.dumps(format(chains, markers := {}), cls=cls, separators=(',', ':'), markers=markers)
