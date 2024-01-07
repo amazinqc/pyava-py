@@ -88,9 +88,9 @@ if __name__ == '__main__':
             # scope(csys.setProperty('b', cstr.valueOf(zero)))
             # scope(a, mark=True)
             # Long(2 ** 10).value = 2 ** 10
-            scope(Class('java.util.Arrays').asList(0, 1, 2))
+            # scope(Class('java.util.Arrays').asList(0, 1, 2))
 
-            scope(Iter().filter(Empty().equals(1)).map(Empty().sum(0, 20)).collect())
+            scope(Iter((0, 5)).scope(scope).tolist())
         r = scope.unwrap()
     print(r)
     '''

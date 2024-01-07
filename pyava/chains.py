@@ -113,7 +113,9 @@ class ChainNode(ChainMixin):
     def __json__(self, markers=None) -> Dict:
         return {} if (local := self._local) is None else {'local': local}
 
+
 type Chains = ChainNode | List[ChainNode] | Tuple[ChainNode, ...]
+
 
 class Entry(ChainNode):
     '''
@@ -222,15 +224,41 @@ class Iter(Entry):
     Each = Entry('local', '$_each_in_iter')
     ''' Each In Iter '''
 
-    def __init__(self, root: ChainNode, foreach: ChainNode = None):
+    type Range = Tuple[int, int]
+
+    def __init__(self, root: ChainNode | Range, foreach: ChainNode = None):
+        '''迭代遍历构造
+
+        参数
+        ---
+        `root: ChainNode | Range(int, int)
+            遍历的对象Iterable/Stream或者数字范围[start,end)
+
+        `foreach: ChainNode`
+            遍历的执行操作
+        ---
+        '''
+        if not isinstance(root, ChainNode):
+            root = Iter.range(root)
         super().__init__(type='iter', ref=foreach, front=root)
+
+    @staticmethod
+    def range(range: Range):
+        return Class('java.util.stream.IntStream').range(range[0], range[1]).boxed()
+
+    def foreach(self, foreach: ChainNode):
+        '''可能会修改node链接状态'''
+        if self._ref:
+            makefront(foreach, self._ref)
+        self._ref = foreach
+        return self
 
     def tolist(self):
         '''转化为ArrayList'''
-        list = Class('java.util.ArrayList').newInstance()
-        makefront(self._front, list)   # 创建ArrayList
-        self._ref = list.add(self._ref or Iter.Each)
-        return self
+        li = Class('java.util.ArrayList').getDeclaredConstructor().newInstance()
+        makefront(self._front, li)   # 创建ArrayList
+        self._ref = li.add(self._ref or Iter.Each)
+        return li
 
     def tomap(self, key: ChainNode = None, value: ChainNode = None):
         '''转化为HashMap
@@ -241,10 +269,10 @@ class Iter(Entry):
         `value`: 值映射，默认`Iter.Each`
         ---
         '''
-        map = Class('java.util.HashMap').newInstance()
-        makefront(self._front, map)
-        self._ref = map.put(key or Iter.Each, value or Iter.Each)
-        return self
+        mp = Class('java.util.HashMap').getDeclaredConstructor().newInstance()
+        makefront(self._front, mp)
+        self._ref = mp.put(key or Iter.Each, value or Iter.Each)
+        return mp
 
     def filter(self, filter: ChainNode = None):
         # TODO impl filter function depends on if-else function
@@ -260,7 +288,7 @@ class IfElse(Entry):
     def ifTrue(self, true: Chains = None):
         # TODO impl if branch function
         return self
-    
+
     def ifFalse(self, false: ChainNode = None):
         # TODO impl else branch function
         return self
