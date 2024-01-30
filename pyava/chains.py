@@ -221,7 +221,7 @@ class Iter(Entry):
         ...
     ```
     '''
-    Each = Entry('local', '$_each_in_iter')
+    Each = Entry('local', '$_each_in_iter', local='$_each_in_iter')
     ''' Each In Iter '''
 
     type Range = Tuple[int, int]
