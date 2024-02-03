@@ -339,6 +339,8 @@ class Iter(Entry):
 
     type Range = Tuple[int, int]
 
+    __slots__ = ('_filter',) + Entry.__slots__
+
     def __init__(self, root: ChainNode | Range, foreach: ChainNode = None):
         '''迭代遍历构造
 
@@ -357,21 +359,26 @@ class Iter(Entry):
         if foreach:
             scope(foreach)
         super().__init__(type='iter', ref=scope, front=root)
+        self._filter = None
 
     @staticmethod
     def range(range: Range):
         return Class('java.util.stream.IntStream').range(range[0], range[1]).boxed()
+    
+    @property
+    def _inner_scope(self) -> Scope:
+        return self._filter or self._ref
 
     def foreach(self, foreach: ChainNode):
         '''合并到迭代作用域'''
-        self._ref(foreach)
+        self._inner_scope(foreach)
         return self
 
     def tolist(self):
         '''转化为ArrayList'''
         li = Class('java.util.ArrayList').getDeclaredConstructor().newInstance()
         makefront(self._front, li)   # 创建ArrayList
-        self.foreach(li.add(self._ref.result or Iter.Each))
+        self.foreach(li.add(self._inner_scope.result or Iter.Each))
         return li
 
     def tomap(self, key: ChainNode = None, value: ChainNode = None):
@@ -389,7 +396,8 @@ class Iter(Entry):
         return mp
 
     def filter(self, filter: ChainNode):
-
+        self.foreach(IfElse(filter).ifTrue(scope := Scope()))
+        self._filter = scope
         return self
 
 
@@ -401,14 +409,16 @@ class IfElse(Entry):
 
         def __init__(self, condition: ChainNode):
             self._if = condition
-            self._true = None
-            self._false = None
+            self._true: Chains | Scope = None
+            self._false: Chains | Scope = None
 
         @override
         def scan(self):
             yield self._if
             for branch in (self._true, self._false):
-                if isinstance(branch, (tuple, list)):
+                if isinstance(branch, Scannable):
+                    yield from branch.scan()
+                elif isinstance(branch, (tuple, list)):
                     for node in branch:
                         yield node
                 elif branch:
@@ -416,13 +426,26 @@ class IfElse(Entry):
 
         @override
         def __json__(self, markers=None) -> Dict[str, Any]:
+            if isinstance(self._true, Scannable):
+                tr = self._true.__json__(markers)
+            elif self._true:
+                tr = transmute(self._true, markers, markable=False)
+            else:
+                tr = None
+            if isinstance(self._false, Scannable):
+                fa = self._false.__json__(markers)
+            elif self._false:
+                fa = transmute(self._false, markers, markable=False)
+            else:
+                fa = None
             return {
                 'if': self._if and transmute(self._if, markers, markable=False),
-                'true': self._true and transmute(self._true, markers, markable=False),
-                'false': self._false and transmute(self._false, markers, markable=False)
+                'true': tr,
+                'false': fa
             }
 
     def __init__(self, condition: ChainNode):
+        '''条件分支表达式'''
         super().__init__(type='if', ref=IfElse._Branch(condition))
 
     def ifTrue(self, onTrue: Chains):
