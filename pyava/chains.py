@@ -4,7 +4,7 @@ from typing import Any, Callable, Dict, Generator, List, Self, Tuple, override
 from .agent import Agent, AgentError
 
 __all__ = (
-    'Entry', 'Accessor', 'Local', 'Class', 'Enum', 'Scope', 'Iter', 'Empty',
+    'Entry', 'Accessor', 'Local', 'Class', 'Enum', 'Scope', 'Iter', 'Empty', 'IfElse'
 )
 
 
@@ -17,6 +17,13 @@ def namespace[R: Callable[...]](func: R) -> R:
             return args[0].__getattr__(func.__name__)(*args, **kwargs)
         return func(*args, **kwargs)
     return wrapper
+
+
+class Jsonable:
+
+    def __json__(self, markers=None) -> Dict[str, Any]:
+        '''转化为JSON可序列化数据'''
+        return {}
 
 
 class ChainMixin:
@@ -102,7 +109,7 @@ class ChainMixin:
         return Class('java.lang.Class').isAssignableFrom(self.getClass()).unwrap() is True
 
 
-class ChainNode(ChainMixin):
+class ChainNode(ChainMixin, Jsonable):
 
     __slots__ = ('_local', '_front')
 
@@ -110,6 +117,7 @@ class ChainNode(ChainMixin):
         self._local: None | str = None
         self._front: None | ChainNode = None
 
+    @override
     def __json__(self, markers=None) -> Dict:
         return {} if (local := self._local) is None else {'local': local}
 
@@ -117,21 +125,113 @@ class ChainNode(ChainMixin):
 type Chains = ChainNode | List[ChainNode] | Tuple[ChainNode, ...]
 
 
-class Entry(ChainNode):
+class Scannable(Jsonable):
+
+    def scan(self) -> Generator[ChainNode, None, None]:
+        '''
+        用于扫描特色分支中的Node节点
+        '''
+        yield None
+
+
+class Scope(Scannable):
+
+    def __init__(self) -> None:
+        self._chains: List[ChainNode | Any] = []
+        self._marked = None
+
+    def mark(self, node: ChainNode = None):
+        '''标记当前节点（默认最后一个节点的返回值）需要返回值
+
+        通常在需要返回中间值，或者返回多值时主动标记返回的对象
+        '''
+        if node is None:
+            node = self._chains[-1]
+        if not isinstance(node, ChainNode):
+            raise TypeError('返回值标记只能是Node类型')
+        node._try_freeze()
+        if not self._marked:
+            self._marked = []
+        self._marked.append(node)
+
+    @property
+    def result(self) -> ChainNode:
+        '''获取作用域的返回节点
+        '''
+        if self._marked:
+            return Class('java.util.Arrays').asList(*self._marked)
+        elif self._chains:
+            return self._chains[-1]
+        else:
+            return None
+
+    @property
+    def chains(self) -> List[ChainNode]:
+        '''获取作用域调用链
+        '''
+        if not (chains := self._chains):
+            raise ValueError('Scope作用域为空')
+        if self._marked:
+            chains.append(self.result)
+        return chains
+
+    def unwrap(self) -> Any:
+        '''获取作用域调用链的结果值
+        '''
+        return Agent.unwrap(Jsonify.dumps(self.chains))
+
+    def __call__(self, node: ChainNode | Any, mark: bool = False) -> Self:
+        '''标记作用域
+        '''
+        if isinstance(node, ChainNode):
+            node._try_freeze()
+        self._chains.append(node)
+        if mark:
+            self.mark()
+        return self
+
+    def _pop(self):
+        '''退回最后包裹的值
+
+        内部使用，在特殊场景下需要合并作用域时，用于包裹目标值并标记作用域节点
+        '''
+        return self._chains.pop()
+
+    def __enter__(self) -> Self:
+        return self
+
+    def __exit__(self, *args, **kwargs):
+        pass
+
+    @override
+    def scan(self):
+        '''扫描作用域的链路节点
+        '''
+        for node in self.chains:
+            yield node
+
+    @override
+    def __json__(self, markers=None) -> Dict:
+        '''转换作用域的链路节点
+        '''
+        return transmute(self.chains, markers, markable=False)
+
+
+class Entry(ChainNode, Scannable):
     '''
     启动入口，如`Class`, `Local`等
     '''
 
     __slots__ = ('_ref', '_type') + ChainNode.__slots__
 
-    def __init__(self, type: str, ref: str | Chains | Dict, local: str = None, front: ChainNode = None):
+    def __init__(self, type: str, ref: str | Scannable, local: str = None, front: ChainNode = None):
         '''初始化入口对象
 
         参数
         ---
         type: str
             可选项：`local`, `class`, `self`, `iter`
-        ref: str | Dict | Chains
+        ref: str | Scannable
             字符串数据，或者对象描述数据，如类名，变量名（待定）
         ---
         '''
@@ -144,15 +244,20 @@ class Entry(ChainNode):
     def __json__(self, markers=None) -> Dict:
         ref = self._ref
         json = {
-            'ref': format(ref, markers, markable=False) if isinstance(ref, ChainNode) else ref,
+            'ref': ref.__json__(markers) if isinstance(ref, Scannable) else ref,
             'type': self._type
         }
         if self._local:
             json['local'] = self._local
         return json
 
+    @override
+    def scan(self):
+        if isinstance(ref := self._ref, Scannable):
+            yield from ref.scan()
 
-class Accessor(ChainNode):
+
+class Accessor(ChainNode, Scannable):
 
     __slots__ = ('_name', '_args') + ChainNode.__slots__
 
@@ -177,7 +282,8 @@ class Accessor(ChainNode):
     def __json__(self, markers=None) -> Dict:
         json = {
             'method': self._name,
-            'args': tuple(format(o, markers, markable=False) if isinstance(o, ChainNode) else o for o in self._args)
+            # args也属于Scannable
+            'args': tuple(transmute(o, markers, markable=False) if isinstance(o, ChainNode) else o for o in self._args)
         }
         if self._local:
             json['local'] = self._local
@@ -195,6 +301,13 @@ class Accessor(ChainNode):
         self._name = field._name
         self._args = field._args
         self._local = None
+
+    @override
+    def scan(self):
+        '''遍历当前节点的参数节点'''
+        for arg in self._args:
+            if isinstance(arg, ChainNode):
+                yield arg
 
 
 class Empty(ChainNode):
@@ -221,7 +334,7 @@ class Iter(Entry):
         ...
     ```
     '''
-    Each = Entry('local', '$_each_in_iter')
+    Each = Entry('local', '$_each_in_iter', local='$_each_in_iter')
     ''' Each In Iter '''
 
     type Range = Tuple[int, int]
@@ -238,26 +351,27 @@ class Iter(Entry):
             遍历的执行操作
         ---
         '''
-        if not isinstance(root, ChainNode):
+        if isinstance(root, (tuple, list)):
             root = Iter.range(root)
-        super().__init__(type='iter', ref=foreach, front=root)
+        scope = Scope()
+        if foreach:
+            scope(foreach)
+        super().__init__(type='iter', ref=scope, front=root)
 
     @staticmethod
     def range(range: Range):
         return Class('java.util.stream.IntStream').range(range[0], range[1]).boxed()
 
     def foreach(self, foreach: ChainNode):
-        '''可能会修改node链接状态'''
-        if self._ref:
-            makefront(foreach, self._ref)
-        self._ref = foreach
+        '''合并到迭代作用域'''
+        self._ref(foreach)
         return self
 
     def tolist(self):
         '''转化为ArrayList'''
         li = Class('java.util.ArrayList').getDeclaredConstructor().newInstance()
         makefront(self._front, li)   # 创建ArrayList
-        self._ref = li.add(self._ref or Iter.Each)
+        self.foreach(li.add(self._ref.result or Iter.Each))
         return li
 
     def tomap(self, key: ChainNode = None, value: ChainNode = None):
@@ -271,80 +385,53 @@ class Iter(Entry):
         '''
         mp = Class('java.util.HashMap').getDeclaredConstructor().newInstance()
         makefront(self._front, mp)
-        self._ref = mp.put(key or Iter.Each, value or Iter.Each)
+        self.foreach(mp.put(key or Iter.Each, value or Iter.Each))
         return mp
 
-    def filter(self, filter: ChainNode = None):
-        # TODO impl filter function depends on if-else function
+    def filter(self, filter: ChainNode):
+
         return self
 
 
 class IfElse(Entry):
 
+    class _Branch(Scannable):
+        '''if-else分支节点'''
+        __slots__ = ('_if', '_true', '_false')
+
+        def __init__(self, condition: ChainNode):
+            self._if = condition
+            self._true = None
+            self._false = None
+
+        @override
+        def scan(self):
+            yield self._if
+            for branch in (self._true, self._false):
+                if isinstance(branch, (tuple, list)):
+                    for node in branch:
+                        yield node
+                elif branch:
+                    yield branch
+
+        @override
+        def __json__(self, markers=None) -> Dict[str, Any]:
+            return {
+                'if': self._if and transmute(self._if, markers, markable=False),
+                'true': self._true and transmute(self._true, markers, markable=False),
+                'false': self._false and transmute(self._false, markers, markable=False)
+            }
+
     def __init__(self, condition: ChainNode):
-        # TODO impl if function
-        super().__init__('if', ref=condition)
+        super().__init__(type='if', ref=IfElse._Branch(condition))
 
-    def ifTrue(self, true: Chains = None):
-        # TODO impl if branch function
+    def ifTrue(self, onTrue: Chains):
+        self._ref._true = onTrue
         return self
 
-    def ifFalse(self, false: ChainNode = None):
-        # TODO impl else branch function
+    def ifFalse(self, onFalse: Chains):
+        self._ref._false = onFalse
         return self
-
-
-class Scope:
-
-    def __init__(self) -> None:
-        self._chains: List[ChainNode | Any] = []
-        self._marked = None
-
-    def mark(self, node: ChainNode = None):
-        '''标记当前节点（默认最后一个节点的返回值）需要返回值
-
-        通常在需要返回中间值，或者返回多值时主动标记返回的对象
-        '''
-        if node is None:
-            node = self._chains[-1]
-        if not isinstance(node, ChainNode):
-            raise TypeError('返回值标记只能是Node类型')
-        node._try_freeze()
-        if not self._marked:
-            self._marked = []
-        self._marked.append(node)
-
-    def unwrap(self) -> Any:
-        '''获取作用域调用链的结果值
-        '''
-        if not (chains := self._chains):
-            raise ValueError('Scope作用域为空')
-        if self._marked:
-            chains.append(Class('java.util.Arrays').asList(*self._marked))
-        return Agent.unwrap(Jsonify.dumps(chains))
-
-    def __call__(self, node: ChainNode | Any, mark: bool = False) -> Self:
-        '''标记作用域
-        '''
-        if isinstance(node, ChainNode):
-            node._try_freeze()
-        self._chains.append(node)
-        if mark:
-            self.mark()
-        return self
-
-    def _pop(self):
-        '''退回最后包裹的值
-
-        内部使用，在特殊场景下需要合并作用域时，用于包裹目标值并标记作用域节点
-        '''
-        return self._chains.pop()
-
-    def __enter__(self) -> Self:
-        return self
-
-    def __exit__(self, *args, **kwargs):
-        pass
 
 
 def Class(clz: str, local: str = None, front: ChainNode = None) -> Entry:
@@ -415,15 +502,9 @@ def flatten_mark(node: ChainNode, markers: Dict[ChainNode, bool]) -> Generator[C
         # 录入前置节点
         if (front := node._front) is not None:
             yield from flatten_mark(front, markers)
-        # 扫描录入特殊引用节点
-        if isinstance(node, Entry) and isinstance(node._ref, ChainNode):
-            tuple(flatten_mark(node._ref, markers))
-        # 扫描录入参数内节点
-        if isinstance(node, Accessor) and (args := node._args):
-            for arg in args:
-                if isinstance(arg, ChainNode):
-                    tuple(flatten_mark(arg, markers))
-        # 录入当前节点为待定标记（已扫描但还不重复）
+        if isinstance(node, Scannable):
+            for scan in node.scan():
+                tuple(flatten_mark(scan, markers))
         markers[node] = False
     elif marker is False:   # ②待标记，直接确认标记
         # 修改当前节点为重复标记
@@ -431,7 +512,7 @@ def flatten_mark(node: ChainNode, markers: Dict[ChainNode, bool]) -> Generator[C
     yield node
 
 
-def chainify(chains: ChainNode | List[ChainNode], markers: Dict[ChainNode, bool | Dict] = None, markable: bool = True):
+def chainify(chains: Chains, markers: Dict[ChainNode, bool | Dict] = None, markable: bool = True):
     '''节点链式展开
 
     参数
@@ -462,7 +543,7 @@ def _merge(nodes):
         yield from chain
 
 
-def format(chains: ChainNode | List[ChainNode], markers: Dict[ChainNode, bool | Dict] = None, markable: bool = True):
+def transmute(chains: Chains, markers: Dict[ChainNode, bool | Dict] = None, markable: bool = True):
     '''
     格式化转译`ChainNode`节点链（或作用域），先转为简易的Dict格式，便于使用`Jsonify`生成可解读的json数据
     '''
@@ -480,7 +561,7 @@ class Jsonify(json.JSONEncoder):
         super().__init__(*args, **kwargs)
 
     def default(self, obj: Any) -> Any:
-        if isinstance(obj, ChainNode):
+        if isinstance(obj, Jsonable):
             if self.markers is None:
                 return obj.__json__()
             marker = self.markers.get(obj)
@@ -499,4 +580,4 @@ class Jsonify(json.JSONEncoder):
 
     @classmethod
     def dumps(cls, chains: ChainNode | List[ChainNode]) -> str:
-        return json.dumps(format(chains, markers := {}), cls=cls, separators=(',', ':'), markers=markers)
+        return json.dumps(transmute(chains, markers := {}), cls=cls, separators=(',', ':'), markers=markers)
