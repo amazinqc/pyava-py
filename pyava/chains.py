@@ -22,7 +22,11 @@ def namespace[R: Callable[...]](func: R) -> R:
 class Jsonable:
 
     def __json__(self, markers=None) -> Dict[str, Any]:
-        '''转化为JSON可序列化数据'''
+        '''当前节点转化为JSON可序列化数据'''
+        return {}
+    
+    def expand(self, markers=None, markable: bool = False):
+        '''当前节点所代表的完整结构展开为JSON可序列化数据'''
         return {}
 
 
@@ -121,6 +125,10 @@ class ChainNode(ChainMixin, Jsonable):
     def __json__(self, markers=None) -> Dict:
         return {} if (local := self._local) is None else {'local': local}
 
+    @override
+    def expand(self, markers=None, markable: bool = False):
+        return transmute(self, markers, markable)
+
 
 type Chains = ChainNode | List[ChainNode] | Tuple[ChainNode, ...]
 
@@ -215,6 +223,12 @@ class Scope(Scannable):
         '''转换作用域的链路节点
         '''
         return transmute(self.chains, markers, markable=False)
+    
+    @override
+    def expand(self, markers=None, markable: bool = False):
+        '''展开作用域的链路节点
+        '''
+        return transmute(self.chains, markers, markable=markable)
 
 
 class Entry(ChainNode, Scannable):
@@ -244,8 +258,8 @@ class Entry(ChainNode, Scannable):
     def __json__(self, markers=None) -> Dict:
         ref = self._ref
         json = {
-            'ref': ref.__json__(markers) if isinstance(ref, Scannable) else ref,
-            'type': self._type
+            'type': self._type,
+            'ref': ref.expand(markers) if isinstance(ref, Scannable) else ref,
         }
         if self._local:
             json['local'] = self._local
@@ -409,39 +423,24 @@ class IfElse(Entry):
 
         def __init__(self, condition: ChainNode):
             self._if = condition
-            self._true: Chains | Scope = None
-            self._false: Chains | Scope = None
+            self._true: ChainNode | Scope = None
+            self._false: ChainNode | Scope = None
 
         @override
         def scan(self):
             yield self._if
             for branch in (self._true, self._false):
-                if isinstance(branch, Scannable):
-                    yield from branch.scan()
-                elif isinstance(branch, (tuple, list)):
-                    for node in branch:
-                        yield node
-                elif branch:
+                if isinstance(branch, ChainNode):
                     yield branch
+                elif isinstance(branch, Scope):
+                    yield from branch.scan()
 
         @override
-        def __json__(self, markers=None) -> Dict[str, Any]:
-            if isinstance(self._true, Scannable):
-                tr = self._true.__json__(markers)
-            elif self._true:
-                tr = transmute(self._true, markers, markable=False)
-            else:
-                tr = None
-            if isinstance(self._false, Scannable):
-                fa = self._false.__json__(markers)
-            elif self._false:
-                fa = transmute(self._false, markers, markable=False)
-            else:
-                fa = None
+        def expand(self, markers=None, markable: bool = False):
             return {
-                'if': self._if and transmute(self._if, markers, markable=False),
-                'true': tr,
-                'false': fa
+                'if': self._if and self._if.expand(markers, markable),
+                'true': self._true and self._true.expand(markers, markable),
+                'false': self._false and self._false.expand(markers, markable),
             }
 
     def __init__(self, condition: ChainNode):
