@@ -1,5 +1,8 @@
+import functools
 import inspect
 from typing import Callable, Dict, List
+
+from back.json import jsonify
 
 _void = inspect.Signature.empty
 
@@ -28,6 +31,7 @@ def _encode(ins):
 
 
 def Param(argname: str, type=_void, default=_void, desc: str = _void):
+    '''标记参数展示数据'''
     def decorator[C: Callable](code: C) -> C:
         if (ps := getattr(code, '__args__', None)) is None:
             setattr(code, '__args__', ps := {})
@@ -44,4 +48,28 @@ def Param(argname: str, type=_void, default=_void, desc: str = _void):
         if desc is not _void:
             info['desc'] = desc
         return code
+    return decorator
+
+
+def TableColumn(name: str, label: str):
+    '''标记列表结果的表格列字段信息'''
+    def decorator[C: Callable](code: C) -> C:
+        is_raw = (cs := getattr(code, '__meta_columns__', None)) is None
+        if is_raw:
+            @functools.wraps(code)
+            def wrapper(*args, **kwargs):
+                return {'meta': {'field': 'data', 'columns': cs}, 'data': jsonify(code(*args, **kwargs))}
+            setattr(wrapper, '__meta_columns__', cs := [])
+        cs.insert(0, {'name': name, 'label': label})
+        return wrapper if is_raw else code
+    return decorator
+
+
+def MapColumns(key: str, val: str):
+    '''标记字典转列表的表格列字段信息'''
+    def decorator[C: Callable](code: C) -> C:
+        @functools.wraps(code)
+        def wrapper(*args, **kwargs):
+            return {'meta': {'field': 'data', 'mapped': True, 'columns': [{'name': 'k', 'label': key}, {'name': 'v', 'label': val}]}, 'data': jsonify(code(*args, **kwargs))}
+        return wrapper
     return decorator

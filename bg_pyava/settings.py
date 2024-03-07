@@ -23,7 +23,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = 'django-insecure-6n@4s5ij7jdtbfpttgk)vt(9f1!kisraq#50hsyiokba6he%48'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = False
 
 ALLOWED_HOSTS = ["*"]
 
@@ -130,6 +130,10 @@ DATETIME_FORMAT = 'Y-m-d H:i:s'
 
 STATIC_URL = 'static/'
 
+STATICFILES_DIRS = [
+    BASE_DIR / 'static',
+]
+
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
 
@@ -187,6 +191,7 @@ LOGGING = {
             'backupCount': 10,
             # 设置每个文件存储的最大体积
             'maxBytes': 1024 * 1024 * 10,
+            'encoding': 'utf-8'
         },
         # 配置邮件处理程序
         'error': {
