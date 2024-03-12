@@ -51,7 +51,7 @@ def Param(argname: str, type=_void, default=_void, desc: str = _void):
     return decorator
 
 
-def TableColumn(name: str, label: str):
+def TableColumn(name: str, label: str, **kwargs):
     '''标记列表结果的表格列字段信息'''
     def decorator[C: Callable](code: C) -> C:
         is_raw = (cs := getattr(code, '__meta_columns__', None)) is None
@@ -60,7 +60,9 @@ def TableColumn(name: str, label: str):
             def wrapper(*args, **kwargs):
                 return {'meta': {'field': 'data', 'columns': cs}, 'data': jsonify(code(*args, **kwargs))}
             setattr(wrapper, '__meta_columns__', cs := [])
-        cs.insert(0, {'name': name, 'label': label})
+        kwargs['name'] = name
+        kwargs['label'] = label
+        cs.insert(0, kwargs)
         return wrapper if is_raw else code
     return decorator
 
@@ -70,6 +72,6 @@ def MapColumns(key: str, val: str):
     def decorator[C: Callable](code: C) -> C:
         @functools.wraps(code)
         def wrapper(*args, **kwargs):
-            return {'meta': {'field': 'data', 'mapped': True, 'columns': [{'name': 'k', 'label': key}, {'name': 'v', 'label': val}]}, 'data': jsonify(code(*args, **kwargs))}
+            return {'meta': {'field': 'data', 'mapped': True, 'columns': [{'name': 'k', 'label': key, 'sortable': True}, {'name': 'v', 'label': val}]}, 'data': jsonify(code(*args, **kwargs))}
         return wrapper
     return decorator
