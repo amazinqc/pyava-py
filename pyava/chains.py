@@ -55,7 +55,7 @@ class ChainMixin:
 
     def __setitem__(self, key: str, value: Any):
         invoker, field = self.field_search(key)
-        self.unwrap(field.set(invoker, value))
+        field.set(invoker, value).unwrap()
 
     def __call__(self, /, *args: Any, local: str = None) -> Self:
         raise NotImplementedError(f'{self.__class__.__name__}未实现调用逻辑')
