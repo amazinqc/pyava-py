@@ -62,5 +62,5 @@ admin.site.register(TypeChoice, TypeAdmin)
 admin.site.register(Tool, ToolAdmin)
 admin.site.register(Server, ServerAdmin)
 admin.site.site_header = "测试后台管理"
-admin.site.site_url = 'http://127.0.0.1/api/'
+admin.site.site_url = '/index.html'
 admin.site.site_title = None
