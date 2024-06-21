@@ -74,6 +74,21 @@ class DebugInPy(Agent):
         return {'code': 200, 'data': data}
 
 
+def array_get(arr, index):
+    return Class('java.lang.reflect.Array').get(arr, index)
+
+def nonull(msg:str):
+    def decorator(func):
+        def wrapper(*args, **kwargs):
+            r = func(*args, **kwargs)
+            return IfElse(Objects.isNull(r)).ifTrue(throw(msg.format(*args, **kwargs))).ifFalse(r)
+        return wrapper
+    return decorator
+
+def throw(msg:str):
+    return array_get(Class('org.GameServer.transport.httpHandler.ChainException').getConstructors(), 0).newInstance(msg).rethrow()
+
+
 if __name__ == '__main__':
 
     with DebugInPy('Local Debug Only') as agent:
