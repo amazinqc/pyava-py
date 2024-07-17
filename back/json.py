@@ -1,10 +1,12 @@
 from abc import abstractmethod
 from functools import wraps
-from typing import Iterable
+from typing import Iterable, Any
 
 from django.core.handlers.wsgi import WSGIRequest
 from django.db.models.query import QuerySet
 from django.http import JsonResponse
+
+from pyava.agent import AgentError
 
 
 class Jsonify():
@@ -18,11 +20,11 @@ def Json(data: Jsonify | dict | QuerySet):
     return JsonResponse({'code': 200, 'data': jsonify(data), })
 
 
-def Error(msg: str):
+def Error(msg: str | Any):
     return JsonResponse({'code': 500, 'message': msg})
 
 
-def jsonify(data: any):
+def jsonify(data: Any):
     if isinstance(data, Jsonify):
         return data.json()
     if isinstance(data, dict):
@@ -52,6 +54,8 @@ def json_response(view):
     def wrapper(*args, **kwargs):
         try:
             return view(*args, **kwargs)
+        except AgentError as ae:
+            return Error(ae.args[0] if ae.args else str(e))
         except BaseException as e:
             import logging
             logging.getLogger('back').error('执行异常', exc_info=e)
